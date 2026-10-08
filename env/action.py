@@ -47,6 +47,8 @@ from env.full_state import (
     MetaData,
     HistoryNode,
     HistoryGroupNode,
+    history_summary_data,
+    make_history_summary,
     BaseActionData,
     BeforeActionErrorActionData,
     RawActionErrorActionData,
@@ -308,6 +310,53 @@ class ActionOutputExceptionInfo(InheritableNode, IActionExceptionInfo, IInstanti
 ##################### IMPLEMENTATION ######################
 ###########################################################
 
+def _history_entry_cost(item: HistoryNode) -> int:
+    """Best-effort final cost recorded on a history entry (0 when absent)."""
+    try:
+        meta_data = item.meta_data.apply().real(MetaData)
+        final_cost = meta_data.final_cost.apply().real(Optional[Integer]).value
+        return final_cost.as_int if final_cost is not None else 0
+    except Exception:
+        return 0
+
+def _apply_history_bound(history: list[HistoryNode], bound: int) -> list[HistoryNode]:
+    """Bound FullState.history, replacing the dropped prefix by one summary node.
+
+    Retained: the goal/initial entry, one HistorySummaryNode and the most
+    recent (bound - 2) entries. The summary is cumulative: a previous summary
+    at index 1 is folded into the new one, so dropped_count is the total
+    number of entries ever dropped.
+    """
+    if bound <= 0:
+        return []
+    if len(history) <= bound:
+        return history
+    if bound == 1:
+        return history[:1]
+
+    prefix = history[:1]
+    body = history[1:]
+    dropped_count = 0
+    dropped_cost = 0
+    if body:
+        previous = history_summary_data(body[0])
+        if previous is not None:
+            dropped_count += previous.dropped_count.apply().real(Integer).as_int
+            dropped_cost += previous.dropped_cost.apply().real(Integer).as_int
+            body = body[1:]
+
+    keep_recent = max(bound - 2, 1)
+    cut = max(len(body) - keep_recent, 0)
+    dropped = body[:cut]
+    kept = body[cut:]
+    dropped_count += len(dropped)
+    for item in dropped:
+        dropped_cost += _history_entry_cost(item)
+
+    summary = make_history_summary(dropped_count, dropped_cost)
+    return prefix + [summary] + kept
+
+
 class BaseAction(InheritableNode, IAction[FullState], typing.Generic[O], ABC):
 
     def as_action(self) -> typing.Self:
@@ -486,7 +535,10 @@ class BaseAction(InheritableNode, IAction[FullState], typing.Generic[O], ABC):
         ).before_run_stats()
 
         if max_history_state_size is not None:
-            history = history[-max_history_state_size.as_int:]
+            history = _apply_history_bound(
+                history,
+                max_history_state_size.as_int,
+            )
 
         new_full_state = FullState.with_args(
             meta=meta,

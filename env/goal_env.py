@@ -1,5 +1,6 @@
 import typing
 import functools
+from config import settings
 from env import meta_env
 from env import full_state
 from env import reward
@@ -44,6 +45,9 @@ class GoalEnv(Environment):
         max_history_state_size: int | None = None,
         max_steps: int | None = None,
     ):
+        if max_history_state_size is None:
+            max_history_state_size = settings.DEFAULT_MAX_HISTORY_STATE_SIZE
+
         meta = _get_meta(
             goal=goal,
             allowed_actions=allowed_actions,

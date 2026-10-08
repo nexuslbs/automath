@@ -4,3 +4,6 @@ scipy
 pandas
 matplotlib
 pytest
+# Training-only dependency (torch) lives in requirements-train.txt; see that
+# file for why it is deliberately not installed here.
+

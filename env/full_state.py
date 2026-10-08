@@ -418,6 +418,54 @@ class HistoryNode(InheritableNode, IDefault, IWrapper, IInstantiable):
             )
         )
 
+class HistorySummaryActionData(BaseActionData, IInstantiable):
+    """Marker payload of a bounded-history summary entry.
+
+    A real, observable node type (not a bare int) stored in the action_data
+    slot of a HistoryNode: it records how many entries the summary replaced
+    and, when cheap, their summed final cost.
+    """
+
+    idx_dropped_count = 1
+    idx_dropped_cost = 2
+
+    @classmethod
+    def protocol(cls) -> Protocol:
+        return cls.default_protocol(CountableTypeGroup(
+            Integer.as_type(),
+            Integer.as_type(),
+        ))
+
+    @classmethod
+    def create(cls, dropped_count: int = 0, dropped_cost: int = 0) -> typing.Self:
+        return cls(Integer(int(dropped_count)), Integer(int(dropped_cost)))
+
+    @property
+    def dropped_count(self) -> TmpInnerArg:
+        return self.inner_arg(self.idx_dropped_count)
+
+    @property
+    def dropped_cost(self) -> TmpInnerArg:
+        return self.inner_arg(self.idx_dropped_cost)
+
+
+def history_summary_data(node: HistoryNode) -> HistorySummaryActionData | None:
+    action_data = node.action_data.apply().real(Optional[BaseActionData]).value
+    if isinstance(action_data, HistorySummaryActionData):
+        return action_data
+    return None
+
+
+def make_history_summary(dropped_count: int, dropped_cost: int = 0) -> HistoryNode:
+    return HistoryNode.with_args(
+        state=State.create(),
+        meta_data=MetaData.create(),
+        action_data=Optional(
+            HistorySummaryActionData.create(dropped_count, dropped_cost)
+        ),
+    )
+
+
 class HistoryGroupNode(BaseGroup[HistoryNode], IInstantiable):
 
     @classmethod
@@ -647,6 +695,94 @@ class FullState(
         if action_data is None:
             return False
         return action_data.is_error().as_bool
+
+    def dropped_history_count(self) -> int:
+        """Total number of history entries replaced by summary nodes."""
+        history = self.history.apply().real(HistoryGroupNode).as_tuple
+        total = 0
+        for item in history:
+            summary = history_summary_data(item)
+            if summary is not None:
+                total += summary.dropped_count.apply().real(Integer).as_int
+        return total
+
+    def last_action_error(self) -> tuple[str, str, str, int] | None:
+        """Structured view of the last action error, or None if the last action succeeded.
+
+        Returns (action_type_name, error_class_name, message, action_index).
+        """
+        action_data_opt = self.last_action_data
+        action_data = action_data_opt.value
+        if action_data is None:
+            return None
+        if not action_data.is_error().as_bool:
+            return None
+        action_opt = action_data.action.apply().real(Optional[IAction])
+        action = action_opt.value
+        action_name = type(action).__name__ if action is not None else '<unknown>'
+        exception_opt = action_data.exception.apply().real(Optional[IExceptionInfo])
+        exception = exception_opt.value
+        error_class = type(exception).__name__ if exception is not None else '<none>'
+        message = ''
+        if exception is not None:
+            try:
+                from env import symbol as symbol_module
+                message = str(symbol_module.Symbol.default(exception))
+            except Exception as e:  # pragma: no cover - defensive only
+                message = f'<unrenderable {error_class}: {e}>'
+            message = ' '.join(message.split())[:400]
+        if not message:
+            message = error_class
+        return (
+            action_name,
+            error_class,
+            message,
+            self.history_amount(),
+        )
+
+    def render_observation(self, max_nodes: int = 40) -> str:
+        """Bounded, compact text view of this state.
+
+        Always contains: the goal, the current state (truncated to max_nodes
+        lines), the final cost, the last action error (if any) and the number
+        of dropped history entries.
+        """
+        max_nodes = max(1, int(max_nodes))
+        meta = self.meta.apply().real(MetaInfo)
+        goal = meta.goal.apply().real(IGoal)
+        lines: list[str] = []
+        lines.append(f'goal: {type(goal).__name__}')
+        lines.append(f'goal_achieved: {self.goal_achieved()}')
+
+        state = self.current_state.apply().real(State)
+        state_text = ''
+        try:
+            from env import symbol as symbol_module
+            state_text = str(symbol_module.Symbol.default(state))
+        except Exception as e:  # pragma: no cover - defensive only
+            state_text = f'<unrenderable {type(state).__name__}: {e}>'
+        state_lines = [line for line in state_text.splitlines() if line.strip()]
+        lines.append(f'current_state ({len(state_lines)} nodes):')
+        for line in state_lines[:max_nodes]:
+            lines.append('  ' + line.strip()[:200])
+
+        try:
+            cost = self.final_cost().as_int
+        except Exception:
+            cost = 0
+        lines.append(f'cost: {cost}')
+
+        error = self.last_action_error()
+        if error is None:
+            lines.append('last_error: none')
+        else:
+            action_name, error_class, message, action_index = error
+            lines.append(
+                f'last_error: action={action_name} class={error_class} '
+                f'index={action_index} message={message}'
+            )
+        lines.append(f'dropped_history_count: {self.dropped_history_count()}')
+        return '\n'.join(lines[:max_nodes + 8])
 
 ###########################################################
 ###################### MAIN INDICES #######################

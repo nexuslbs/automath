@@ -898,3 +898,7 @@ simple agent, `config/agent_settings.py:25-29`).
    `python -c 'import tests; tests.test()'`, and correctness is asserted by
    exact state equality plus `test_root._final_verification`, not by a numeric
    score (`tests.py:4-12`, `test_suite/test_root.py:50-60`).
+
+The implemented design that closes gaps 1-4 is documented in
+[`docs/DESIGN.md`](DESIGN.md) (unit U3a).
+

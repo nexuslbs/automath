@@ -1,3 +1,4 @@
+import time
 from env import core, node_data, symbol
 from env import action as action_module
 from env import full_state as full_state_module
@@ -15,6 +16,7 @@ class Environment:
         self._reward_evaluator = reward_evaluator or reward_module.DefaultRewardEvaluator.create()
         self._max_steps = max_steps
         self._current_step = 0
+        self._step_times: list[float] = []
 
     @property
     def full_state(self) -> full_state_module.FullState:
@@ -34,6 +36,7 @@ class Environment:
     def reset(self) -> full_state_module.FullState:
         self._full_state = self._initial_state
         self._current_step = 0
+        self._step_times = []
         core.INode.clear_cache()
         return self._full_state
 
@@ -43,7 +46,9 @@ class Environment:
     ) -> tuple[full_state_module.FullState, float, bool, bool]:
         reward_evaluator = self._reward_evaluator
         current_state = self._full_state
+        step_start = time.perf_counter()
         next_state = action.run_action(current_state)
+        self._step_times.append(time.perf_counter() - step_start)
         reward = reward_evaluator.evaluate(
             current_state,
             next_state)
@@ -56,6 +61,13 @@ class Environment:
         )
         self._full_state = next_state
         return next_state, reward, terminated, truncated
+
+    @property
+    def step_times(self) -> tuple[float, ...]:
+        return tuple(self._step_times)
+
+    def total_time(self) -> float:
+        return sum(self._step_times)
 
     @property
     def as_symbol(self) -> symbol.Symbol:

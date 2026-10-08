@@ -340,8 +340,9 @@ curl -sS http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"minicpm5-1b","messages":[{"role":"system","content":"You choose the next action for a symbolic-math environment. Reply with a single JSON object and nothing else: {\"action\": \"<ActionTypeName>\", \"args\": [int, int, int]}."},{"role":"user","content":"Goal: HaveResultScratch(Eq[BinaryInt]). Allowed actions include CreateScratch. Reply with the next action as JSON."}],"max_tokens":2048,"temperature":0}'
 
-# module wall/RSS
-/usr/bin/time -v python -c 'import arithmetic_test'   # see /opt/automath/measure/
+# module wall/RSS (the prior unit's runner, timeout 300 s)
+/usr/bin/time -v timeout 300 python -u -c "from test_suite import arithmetic_test as m, test_utils; test_utils.run_module_test(m.test)"
+# see /opt/automath/measure/summary.txt for the recorded wall/RSS
 ```
 
 Measured cost of the LLM path, **reported as-is**:

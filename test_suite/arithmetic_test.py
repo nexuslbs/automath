@@ -30,13 +30,22 @@ def get_basic_action_index(node_type: type[action.IBasicAction], env: GoalEnv):
     meta_idx = selected_types.as_tuple.index(node_type.as_type()) + 1
     return meta_idx
 
-def run_single_eq(left_expr: core.INode, right_expr: core.INode, result: bool):
-    goal = node_types.HaveResultScratch.with_goal(core.Eq(left_expr, right_expr))
-    env = GoalEnv(
+def build_result_env(goal_expr: core.INode, max_steps: int = 3):
+    """HaveResultScratch GoalEnv over ``goal_expr``.
+
+    Shared by the arithmetic tests and ``scripts/run_case.py`` so the runner and
+    the test build the case the same way.
+    """
+    goal = node_types.HaveResultScratch.with_goal(goal_expr)
+    return GoalEnv(
         goal=goal,
-        max_steps=3,
+        max_steps=max_steps,
         allowed_actions=node_types.ESSENTIAL_ACTIONS,
     )
+
+def run_single_eq(left_expr: core.INode, right_expr: core.INode, result: bool):
+    goal = node_types.HaveResultScratch.with_goal(core.Eq(left_expr, right_expr))
+    env = build_result_env(core.Eq(left_expr, right_expr), max_steps=3)
     assert has_goal(env=env, goal=goal)
 
     current_state = get_current_state(env)
@@ -302,64 +311,71 @@ def has_goal(env: GoalEnv, goal: meta_env.IGoal):
     ).apply()
     return selected_goal == goal
 
+def binary_int_basic_cases():
+    """Case inputs for test_binary_int_basic, shared with scripts/run_case.py."""
+    return [
+        {
+            'raw_expr': core.INumber.zero(),
+            'correct_expr': core.INumber.zero(),
+            'wrong_exprs': [
+                core.INumber.one(),
+                core.BinaryInt(core.IBoolean.true(), core.IBoolean.true()),
+                core.Integer(0),
+                core.DefaultGroup(core.INumber.zero()),
+            ],
+        },
+        {
+            'raw_expr': core.INumber.one(),
+            'correct_expr': core.INumber.one(),
+            'wrong_exprs': [
+                core.INumber.zero(),
+                core.BinaryInt(core.IBoolean.true(), core.IBoolean.false(), core.IBoolean.true()),
+                core.Integer(1),
+                core.DefaultGroup(core.INumber.one()),
+            ],
+        },
+    ]
+
 def test_binary_int_basic() -> list[full_state.FullState]:
     final_states: list[full_state.FullState] = []
 
-    final_states += run(
-        raw_expr=core.INumber.zero(),
-        correct_expr=core.INumber.zero(),
-        wrong_exprs=[
-            core.INumber.one(),
-            core.BinaryInt(core.IBoolean.true(), core.IBoolean.true()),
-            core.Integer(0),
-            core.DefaultGroup(core.INumber.zero()),
-        ],
-    )
-    final_states += run(
-        raw_expr=core.INumber.one(),
-        correct_expr=core.INumber.one(),
-        wrong_exprs=[
-            core.INumber.zero(),
-            core.BinaryInt(core.IBoolean.true(), core.IBoolean.false(), core.IBoolean.true()),
-            core.Integer(1),
-            core.DefaultGroup(core.INumber.one()),
-        ],
-    )
+    for case in binary_int_basic_cases():
+        final_states += run(**case)
 
     return final_states
 
-def test_signed_int_basic() -> list[full_state.FullState]:
-    final_states: list[full_state.FullState] = []
-
-    final_states += run(
-        raw_expr=core.SignedInt(
+def signed_int_basic_cases():
+    """Case inputs for test_signed_int_basic, shared with scripts/run_case.py."""
+    return [
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign(core.IBoolean.false()),
             core.INumber.zero(),
         ),
-        correct_expr=core.INumber.zero(),
-        wrong_exprs=[
+            'correct_expr': core.INumber.zero(),
+            'wrong_exprs': [
             core.INumber.one(),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt(
+        },
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign(core.IBoolean.false()),
             core.INumber.one(),
         ),
-        correct_expr=core.INumber.one(),
-        wrong_exprs=[
+            'correct_expr': core.INumber.one(),
+            'wrong_exprs': [
             core.INumber.minus_one(),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt.minus_one(),
-        correct_expr=core.SignedInt.minus_one(),
-        wrong_exprs=[
+        },
+        {
+            'raw_expr': core.SignedInt.minus_one(),
+            'correct_expr': core.SignedInt.minus_one(),
+            'wrong_exprs': [
             core.INumber.one(),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt(
+        },
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign(core.IBoolean.false()),
             core.BinaryInt(
                 core.IBoolean.false(),
@@ -369,12 +385,12 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 core.IBoolean.true(),
             ),
         ),
-        correct_expr=core.BinaryInt(
+            'correct_expr': core.BinaryInt(
             core.IBoolean.true(),
             core.IBoolean.false(),
             core.IBoolean.true(),
         ),
-        wrong_exprs=[
+            'wrong_exprs': [
             core.INumber.minus_one(),
             core.SignedInt(
                 core.NegativeSign.create(),
@@ -385,9 +401,9 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 ),
             ),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt(
+        },
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign.create(),
             core.BinaryInt(
                 core.IBoolean.false(),
@@ -397,7 +413,7 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 core.IBoolean.true(),
             ),
         ),
-        correct_expr=core.SignedInt(
+            'correct_expr': core.SignedInt(
             core.NegativeSign.create(),
             core.BinaryInt(
                 core.IBoolean.true(),
@@ -405,7 +421,7 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 core.IBoolean.true(),
             ),
         ),
-        wrong_exprs=[
+            'wrong_exprs': [
             core.INumber.minus_one(),
             core.BinaryInt(
                 core.IBoolean.true(),
@@ -413,9 +429,9 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 core.IBoolean.true(),
             ),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt(
+        },
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign.create(),
             core.SignedInt(
                 core.NegativeSign.create(),
@@ -427,11 +443,11 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 ),
             ),
         ),
-        correct_expr=core.BinaryInt(
+            'correct_expr': core.BinaryInt(
             core.IBoolean.true(),
             core.IBoolean.false(),
         ),
-        wrong_exprs=[
+            'wrong_exprs': [
             core.INumber.one(),
             core.SignedInt(
                 core.NegativeSign.create(),
@@ -441,9 +457,9 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 ),
             ),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt(
+        },
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign(core.IBoolean.false()),
             core.SignedInt(
                 core.NegativeSign.create(),
@@ -455,23 +471,23 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 ),
             ),
         ),
-        correct_expr=core.SignedInt(
+            'correct_expr': core.SignedInt(
             core.NegativeSign.create(),
             core.BinaryInt(
                 core.IBoolean.true(),
                 core.IBoolean.false(),
             ),
         ),
-        wrong_exprs=[
+            'wrong_exprs': [
             core.INumber.one(),
             core.BinaryInt(
                 core.IBoolean.true(),
                 core.IBoolean.false(),
             ),
         ],
-    )
-    final_states += run(
-        raw_expr=core.SignedInt(
+        },
+        {
+            'raw_expr': core.SignedInt(
             core.NegativeSign.create(),
             core.SignedInt(
                 core.NegativeSign(core.IBoolean.false()),
@@ -483,60 +499,67 @@ def test_signed_int_basic() -> list[full_state.FullState]:
                 ),
             ),
         ),
-        correct_expr=core.SignedInt(
+            'correct_expr': core.SignedInt(
             core.NegativeSign.create(),
             core.BinaryInt(
                 core.IBoolean.true(),
                 core.IBoolean.false(),
             ),
         ),
-        wrong_exprs=[
+            'wrong_exprs': [
             core.INumber.one(),
             core.BinaryInt(
                 core.IBoolean.true(),
                 core.IBoolean.false(),
             ),
         ],
-    )
+        },
+    ]
+
+def test_signed_int_basic() -> list[full_state.FullState]:
+    final_states: list[full_state.FullState] = []
+
+    for case in signed_int_basic_cases():
+        final_states += run(**case)
 
     return final_states
 
-def test_int_to_binary() -> list[full_state.FullState]:
-    final_states: list[full_state.FullState] = []
-
-    final_states += run(
-        raw_expr=core.IntToBinary(core.Integer(0)),
-        correct_expr=core.INumber.zero(),
-        wrong_exprs=[
+def int_to_binary_cases():
+    """Case inputs for test_int_to_binary, shared with scripts/run_case.py."""
+    return [
+        {
+            'raw_expr': core.IntToBinary(core.Integer(0)),
+            'correct_expr': core.INumber.zero(),
+            'wrong_exprs': [
             core.INumber.one(),
             core.BinaryInt(core.IBoolean.true(), core.IBoolean.false()),
             core.Integer(0),
             core.Optional(core.INumber.zero()),
         ],
-    )
-    final_states += run(
-        raw_expr=core.IntToBinary(core.Integer(1)),
-        correct_expr=core.INumber.one(),
-        wrong_exprs=[
+        },
+        {
+            'raw_expr': core.IntToBinary(core.Integer(1)),
+            'correct_expr': core.INumber.one(),
+            'wrong_exprs': [
             core.INumber.zero(),
             core.BinaryInt(core.IBoolean.true(), core.IBoolean.false(), core.IBoolean.false()),
             core.Integer(1),
             core.Optional(core.INumber.one()),
         ],
-    )
-    final_states += run(
-        raw_expr=core.IntToBinary(core.Integer(2)),
-        correct_expr=core.BinaryInt(core.IBoolean.true(), core.IBoolean.false()),
-        wrong_exprs=[
+        },
+        {
+            'raw_expr': core.IntToBinary(core.Integer(2)),
+            'correct_expr': core.BinaryInt(core.IBoolean.true(), core.IBoolean.false()),
+            'wrong_exprs': [
             core.INumber.one(),
             core.BinaryInt(core.IBoolean.true(), core.IBoolean.true()),
             core.Integer(2),
             core.Optional(core.BinaryInt(core.IBoolean.true(), core.IBoolean.false())),
         ],
-    )
-    final_states += run(
-        raw_expr=core.IntToBinary(core.Integer(1000)),
-        correct_expr=core.BinaryInt(
+        },
+        {
+            'raw_expr': core.IntToBinary(core.Integer(1000)),
+            'correct_expr': core.BinaryInt(
             core.IBoolean.true(),
             core.IBoolean.true(),
             core.IBoolean.true(),
@@ -548,7 +571,7 @@ def test_int_to_binary() -> list[full_state.FullState]:
             core.IBoolean.false(),
             core.IBoolean.false(),
         ),
-        wrong_exprs=[
+            'wrong_exprs': [
             core.BinaryInt(
                 core.IBoolean.true(),
                 core.IBoolean.false(),
@@ -578,7 +601,14 @@ def test_int_to_binary() -> list[full_state.FullState]:
                 ),
             ),
         ],
-    )
+        },
+    ]
+
+def test_int_to_binary() -> list[full_state.FullState]:
+    final_states: list[full_state.FullState] = []
+
+    for case in int_to_binary_cases():
+        final_states += run(**case)
 
     return final_states
 

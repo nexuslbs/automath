@@ -28,13 +28,29 @@ def get_basic_action_index(node_type: type[action.IBasicAction], env: GoalEnv):
     meta_idx = selected_types.as_tuple.index(node_type.as_type()) + 1
     return meta_idx
 
-def run(goal_expr: core.IRunnable, result: bool):
+def build_env(goal_expr: core.IRunnable, max_steps: int = 3):
+    """HaveResultScratch GoalEnv over ``goal_expr``.
+
+    Shared by the boolean tests and ``scripts/run_case.py`` so the runner and
+    the test build the case the same way.
+    """
     goal = node_types.HaveResultScratch.with_goal(goal_expr)
-    env = GoalEnv(
+    return GoalEnv(
         goal=goal,
-        max_steps=3,
+        max_steps=max_steps,
         allowed_actions=node_types.ESSENTIAL_ACTIONS,
     )
+
+def less_than_case() -> core.IRunnable:
+    """The LessThan(Integer(1), Integer(2)) goal shared with scripts/run_case.py."""
+    return core.LessThan(
+        core.Integer(1),
+        core.Integer(2),
+    )
+
+def run(goal_expr: core.IRunnable, result: bool):
+    goal = node_types.HaveResultScratch.with_goal(goal_expr)
+    env = build_env(goal_expr, max_steps=3)
     assert has_goal(env=env, goal=goal)
 
     current_state = get_current_state(env)
@@ -333,10 +349,7 @@ def test_boolean() -> list[full_state.FullState]:
         core.Integer(1),
     ), result=False))
 
-    final_states.append(run(goal_expr=core.LessThan(
-        core.Integer(1),
-        core.Integer(2),
-    ), result=True))
+    final_states.append(run(goal_expr=less_than_case(), result=True))
     final_states.append(run(goal_expr=core.LessThan(
         core.Integer(2),
         core.Integer(1),

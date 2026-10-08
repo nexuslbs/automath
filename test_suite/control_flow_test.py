@@ -82,7 +82,12 @@ def has_goal(env: GoalEnv, goal: meta_env.IGoal):
     ).apply()
     return selected_goal == goal
 
-def test_control_flow() -> list[full_state.FullState]:
+def build_case(max_steps: int | None = None):
+    """GoalEnv with the control-flow initial state, shared with scripts/run_case.py.
+
+    Returns (env, goal, state_meta, scratches, args_groups); test_control_flow
+    uses this same construction so the runner and the test cannot drift.
+    """
     goal = node_types.HaveScratch.with_goal(core.Void())
     state_meta = state.StateMetaInfo.with_goal_expr(goal)
 
@@ -1095,7 +1100,14 @@ def test_control_flow() -> list[full_state.FullState]:
                 meta_data=full_state.MetaData.create(),
             )
         ),
+        max_steps=max_steps,
     )
+    return (env, goal, state_meta, scratches, args_groups,
+            if_scratches, loop_scratches, fn_scratches)
+
+def test_control_flow() -> list[full_state.FullState]:
+    (env, goal, state_meta, scratches, args_groups,
+     if_scratches, loop_scratches, fn_scratches) = build_case()
     assert has_goal(env=env, goal=goal)
 
     def test_if():

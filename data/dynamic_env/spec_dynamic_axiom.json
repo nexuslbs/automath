@@ -1,0 +1,62 @@
+{
+  "spec_id": "spec_dynamic_axiom",
+  "description": "DYNAMIC-AXIOM spec: setting the key objective fires a dynamic axiom that activates the build rule and adds a node mid-episode, deterministically.",
+  "node_types": {
+    "num": {
+      "semantics": "literal",
+      "role": "value",
+      "value_field": "n",
+      "fields": [{"name": "n", "type": "int"}]
+    },
+    "op": {
+      "semantics": "literal",
+      "role": "tag",
+      "value_field": "s",
+      "fields": [{"name": "s", "type": "str"}]
+    },
+    "grp": {
+      "semantics": "combination",
+      "role": "plain",
+      "fields": [{"name": "tag", "type": "node"}, {"name": "items", "type": "nodes"}]
+    },
+    "flag": {
+      "semantics": "literal",
+      "role": "objective",
+      "value_field": "v",
+      "fields": [{"name": "v", "type": "int"}]
+    }
+  },
+  "combine_axioms": [
+    {"id": "ax_sub", "tag": "sub", "arity": 2, "op": "sub", "active": true}
+  ],
+  "build_axioms": [
+    {"id": "build_sub", "tag_node": "t_sub", "arity": 2, "node_type": "grp", "operand_type": null, "active": false}
+  ],
+  "dynamic_axioms": [
+    {
+      "id": "dyn_unlock",
+      "when": {"op": "objective_is", "id": "key", "value": 1},
+      "effect": [
+        {"op": "activate_axiom", "id": "build_sub"},
+        {"op": "add_node", "id": "n7", "node": {"type": "num", "n": 7}}
+      ],
+      "active": true,
+      "once": true
+    }
+  ],
+  "nodes": {
+    "n9": {"type": "num", "n": 9},
+    "t_sub": {"type": "op", "s": "sub"},
+    "key": {"type": "flag", "v": 0},
+    "o": {"type": "flag", "v": 0}
+  },
+  "objectives": {"key": 1, "o": 1},
+  "guards": {
+    "o": {"op": "exists_value", "cmp": "eq", "value": 2, "combination_only": true}
+  },
+  "dynamic_node_type": null,
+  "max_combine_arity": 0,
+  "step_cost": 0.01,
+  "goal_reward": 1.0,
+  "max_steps": 10
+}

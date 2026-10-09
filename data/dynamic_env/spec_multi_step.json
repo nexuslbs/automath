@@ -1,0 +1,58 @@
+{
+  "spec_id": "spec_multi_step",
+  "description": "MULTI-STEP spec: several correct paths reach the goal, but the minimal action sequence is unique; min-steps is well defined.",
+  "node_types": {
+    "num": {
+      "semantics": "literal",
+      "role": "value",
+      "value_field": "n",
+      "fields": [{"name": "n", "type": "int"}]
+    },
+    "op": {
+      "semantics": "literal",
+      "role": "tag",
+      "value_field": "s",
+      "fields": [{"name": "s", "type": "str"}]
+    },
+    "grp": {
+      "semantics": "combination",
+      "role": "plain",
+      "fields": [{"name": "tag", "type": "node"}, {"name": "items", "type": "nodes"}]
+    },
+    "flag": {
+      "semantics": "literal",
+      "role": "objective",
+      "value_field": "v",
+      "fields": [{"name": "v", "type": "int"}]
+    }
+  },
+  "combine_axioms": [
+    {"id": "ax_add", "tag": "add", "arity": 2, "op": "sum", "active": true},
+    {"id": "ax_sub", "tag": "sub", "arity": 2, "op": "sub", "active": true},
+    {"id": "ax_mul", "tag": "mul", "arity": 2, "op": "mul", "active": true}
+  ],
+  "build_axioms": [
+    {"id": "build_add", "tag_node": "t_add", "arity": 2, "node_type": "grp", "operand_type": null, "active": true},
+    {"id": "build_sub", "tag_node": "t_sub", "arity": 2, "node_type": "grp", "operand_type": null, "active": true},
+    {"id": "build_mul", "tag_node": "t_mul", "arity": 2, "node_type": "grp", "operand_type": null, "active": true}
+  ],
+  "dynamic_axioms": [],
+  "nodes": {
+    "n9": {"type": "num", "n": 9},
+    "n5": {"type": "num", "n": 5},
+    "n3": {"type": "num", "n": 3},
+    "t_add": {"type": "op", "s": "add"},
+    "t_sub": {"type": "op", "s": "sub"},
+    "t_mul": {"type": "op", "s": "mul"},
+    "o": {"type": "flag", "v": 0}
+  },
+  "objectives": {"o": 1},
+  "guards": {
+    "o": {"op": "exists_value", "cmp": "eq", "value": 4, "combination_only": true}
+  },
+  "dynamic_node_type": null,
+  "max_combine_arity": 0,
+  "step_cost": 0.01,
+  "goal_reward": 1.0,
+  "max_steps": 12
+}

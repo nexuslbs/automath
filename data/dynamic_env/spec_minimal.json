@@ -1,0 +1,25 @@
+{
+  "spec_id": "spec_minimal",
+  "description": "MINIMAL spec: one elementar 1/0 objective node, no combination nodes, goal in one step.",
+  "node_types": {
+    "flag": {
+      "semantics": "literal",
+      "role": "objective",
+      "value_field": "v",
+      "fields": [{"name": "v", "type": "int"}]
+    }
+  },
+  "combine_axioms": [],
+  "build_axioms": [],
+  "dynamic_axioms": [],
+  "nodes": {
+    "o1": {"type": "flag", "v": 0}
+  },
+  "objectives": {"o1": 1},
+  "guards": {},
+  "dynamic_node_type": null,
+  "max_combine_arity": 0,
+  "step_cost": 0.1,
+  "goal_reward": 1.0,
+  "max_steps": 6
+}

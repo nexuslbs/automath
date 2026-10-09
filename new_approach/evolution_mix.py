@@ -58,13 +58,13 @@ from .evolution_population import (
     init_population,
     load_checkpoint,
 )
+from .target_features import net_size
 
 RECORDED_ELITE = "g00014-c011"
 RECORDED_PARENTS = ("g00013-c002", "g00013-c003")
 REPLAY_GENERATIONS = 13  # gen 0..12 -> population seeded with g00013-c* offspring
 BLX_ALPHA = 0.5
-EXEMPLAR_PREF = (0, 13)
-EXEMPLAR_STATE = (2,)
+EXEMPLAR_NET = (0, 13, 2)
 
 
 def load_cfg(path: str, **overrides) -> EvoConfig:
@@ -92,8 +92,8 @@ def load_elite(ckpt_dir: str, progress_dir: str) -> Genome:
             if snap and snap.get("best_gid") == RECORDED_ELITE:
                 genes = snap["best_genes"]
                 return Genome(
-                    pref=[float(x) for x in genes["pref"]],
-                    state_pref=[float(x) for x in genes["state_pref"]],
+                    net=[float(x) for x in genes.get(
+                        "net", [0.0] * net_size())],
                     epsilon=float(genes["epsilon"]),
                     switch_patience=int(genes["switch_patience"]),
                     gid=RECORDED_ELITE, origin="elite",
@@ -171,8 +171,7 @@ def build_offspring(elite: Genome, p1: Genome, p2: Genome,
     for tag, a, b, count in plan:
         for i in range(count):
             child = Genome(
-                pref=blx(a.pref, b.pref, BLX_ALPHA, rng),
-                state_pref=blx(a.state_pref, b.state_pref, BLX_ALPHA, rng),
+                net=blx(a.net, b.net, BLX_ALPHA, rng),
                 epsilon=(a.epsilon if rng.random() < 0.5 else b.epsilon),
                 switch_patience=(a.switch_patience
                                  if rng.random() < 0.5
@@ -185,20 +184,12 @@ def build_offspring(elite: Genome, p1: Genome, p2: Genome,
                 "pair": tag, "parent_a": a.gid, "parent_b": b.gid,
                 "method": "BLX-alpha", "alpha": BLX_ALPHA,
             }
-            for idx in EXEMPLAR_PREF:
-                detail["pref[%d]" % idx] = {
-                    "A": round(a.pref[idx], 6), "B": round(b.pref[idx], 6),
-                    "child": round(child.pref[idx], 6),
-                    "nearer": _nearer(child.pref[idx], a.pref[idx],
-                                      b.pref[idx]),
-                }
-            for idx in EXEMPLAR_STATE:
-                detail["state_pref[%d]" % idx] = {
-                    "A": round(a.state_pref[idx], 6),
-                    "B": round(b.state_pref[idx], 6),
-                    "child": round(child.state_pref[idx], 6),
-                    "nearer": _nearer(child.state_pref[idx], a.state_pref[idx],
-                                      b.state_pref[idx]),
+            for idx in EXEMPLAR_NET:
+                detail["net[%d]" % idx] = {
+                    "A": round(a.net[idx], 6), "B": round(b.net[idx], 6),
+                    "child": round(child.net[idx], 6),
+                    "nearer": _nearer(child.net[idx], a.net[idx],
+                                      b.net[idx]),
                 }
             child.cross_detail = detail
             offspring.append(child)
@@ -282,7 +273,7 @@ def main(argv=None) -> int:
     for g in offspring:
         d = g.cross_detail
         print("  %s <- %s" % (g.gid, d.get("pair")))
-        for key in ("pref[0]", "pref[13]", "state_pref[2]"):
+        for key in ("net[0]", "net[13]", "net[2]"):
             if key in d:
                 print("     %-13s A=%.4f B=%.4f child=%.4f nearer=%s"
                       % (key, d[key]["A"], d[key]["B"], d[key]["child"],

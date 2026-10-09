@@ -5,8 +5,9 @@ This module EXTENDS the Unit C population machinery
 (``evolution_mix.py``) instead of rewriting them:
 
 * every genome is still the same heritable BASIC INSTINCT
-  (``pref`` over the 21 extended actions, ``state_pref`` over the bundle states,
-  ``epsilon``, ``switch_patience``);
+  (``net`` = the target-conditioned PolicyNet weights, ``epsilon``,
+  ``switch_patience``); the retired ``pref`` / ``state_pref`` flat vectors are
+  gone, so the SAME parameters score actions for new targets;
 * the difference is the LEARNING SIGNAL: the agent trains on the shaped
   per-step reward of ``evolution_rewards.py`` (step cost + PBRS + sub-goal
   bonus + final goal), and selection ranks the SHAPED episode return plus the
@@ -95,7 +96,7 @@ class ShapedBundleResult(BundleResult):
 def run_bundle_shaped(
     agent: EvolutionAgent,
     bundle: Bundle,
-    state_pref: Sequence[float],
+    start_scores: Optional[Sequence[float]] = None,
     total_budget: Optional[int] = None,
     training: bool = False,
     epsilon: float = 0.0,
@@ -109,7 +110,15 @@ def run_bundle_shaped(
     the only difference is the reward.  The solving step is charged the step
     cost AND the shaping AND the ``+1.0`` final goal (the four terms are
     additive, per the binding design).
+
+    ``start_scores`` is derived from the SAME policy net over the ``__start__``
+    pseudo action when not supplied (``None``), so the retired per-state
+    preference vector is not needed.
     """
+    if start_scores is None:
+        start_scores = (agent.start_scores(bundle.states)
+                        if getattr(agent, "use_net", False)
+                        else [0.0] * len(bundle.states))
     rcfg = reward_config or RewardConfig()
     budget = total_budget if total_budget is not None else bundle.total_budget
     envs = {s.sid: EvoEnv(FixedStateGoal(s.target),
@@ -121,9 +130,9 @@ def run_bundle_shaped(
     trace: List[TraceEvent] = []
     trajectory: List[Tuple[str, float, float, str]] = []
     reward_log: List[dict] = []
-    order = start_order(bundle, state_pref)
+    order = start_order(bundle, start_scores)
     order_pos = {sid: i for i, sid in enumerate(order)}
-    pref_by_sid = {sid: float(state_pref[bundle.index(sid)]) for sid in order}
+    pref_by_sid = {sid: float(start_scores[bundle.index(sid)]) for sid in order}
     swept: set = set()
     remaining = budget
     step_no = 0
@@ -168,6 +177,7 @@ def run_bundle_shaped(
         sr = per_state[current]
         swept.add(current)
         target = bundle.by_id(current).target
+        agent.set_target(target)
         if env.goal_achieved(state):
             sr.solved = True
             solved += 1
@@ -304,12 +314,13 @@ def make_shaped_agent(genome: Genome, cfg: EvoConfig, seed: int
         epsilon_end=max(cfg.epsilon_min, 0.02),
         episodes=max(1, cfg.episodes),
         seed=seed,
-        use_pref=True,
+        use_pref=False,
+        use_net=True,
+        net=genome.net,
         pref_lr=cfg.pref_lr,
         beta=cfg.beta,
-        pref_sigma=cfg.sigma_pref,
+        pref_sigma=cfg.net_sigma,
         pref_mode=cfg.pref_mode,
-        pref_init=genome.pref_map(),
         switch_patience=genome.switch_patience,
     )
 
@@ -323,7 +334,7 @@ def train_genome_shaped(genome: Genome, bundle: Bundle, cfg: EvoConfig,
     for ep in range(max(1, cfg.episodes)):
         epsilon = agent._epsilon(ep)
         result = run_bundle_shaped(
-            agent, bundle, genome.state_pref,
+            agent, bundle, None,
             total_budget=cfg.total_budget, training=True, epsilon=epsilon,
             reward_config=reward_config)
         agent.update_pref(result.trajectory)
@@ -336,7 +347,7 @@ def evaluate_genome_shaped(genome: Genome, bundle: Bundle, cfg: EvoConfig,
                            ) -> ShapedBundleResult:
     agent = train_genome_shaped(genome, bundle, cfg, seed, reward_config)
     result = run_bundle_shaped(
-        agent, bundle, genome.state_pref, total_budget=cfg.total_budget,
+        agent, bundle, None, total_budget=cfg.total_budget,
         training=False, reward_config=reward_config)
     genome.fitness = (result.shaped_return
                       + cfg.solved_rate_weight * result.solved_rate())
@@ -371,9 +382,7 @@ def _make_child(a: Genome, b: Genome, rng: random.Random,
                 cfg: EvoConfig) -> Genome:
     if cfg.use_blx:
         child = Genome(
-            pref=blx(a.pref, b.pref, cfg.blx_alpha, rng, cfg.pref_clip),
-            state_pref=blx(a.state_pref, b.state_pref, cfg.blx_alpha, rng,
-                           cfg.pref_clip),
+            net=blx(a.net, b.net, cfg.blx_alpha, rng, cfg.pref_clip),
             epsilon=(a.epsilon if rng.random() < 0.5 else b.epsilon),
             switch_patience=(a.switch_patience if rng.random() < 0.5
                              else b.switch_patience),
@@ -440,14 +449,9 @@ def evolve_one_generation_shaped(
                 child = clone_genome(
                     seed_parent, gid="g%05d-c%03d" % (gen + 1, i),
                     origin="restart")
-                for j in range(len(child.pref)):
-                    child.pref[j] = _clamp(
-                        child.pref[j] + rng.gauss(0.0, cfg.restart_sigma),
-                        -cfg.pref_clip, cfg.pref_clip)
-                for j in range(len(child.state_pref)):
-                    child.state_pref[j] = _clamp(
-                        child.state_pref[j]
-                        + rng.gauss(0.0, cfg.restart_sigma),
+                for j in range(len(child.net)):
+                    child.net[j] = _clamp(
+                        child.net[j] + rng.gauss(0.0, cfg.restart_sigma),
                         -cfg.pref_clip, cfg.pref_clip)
                 child.epsilon = _clamp(
                     seed_parent.epsilon + rng.gauss(0.0, 0.1),
@@ -525,6 +529,7 @@ def train_shaped(agent: EvolutionAgent, cases: Sequence, episodes: int,
             # ExprGoal cases have no single target; they keep the plain
             # step-cost + goal signal only (documented as such).
             target = getattr(case.env.goal, "target", None)
+            agent.set_target(target)
             shaper = EpisodeShaper(rcfg)
             state = case.env.reset()
             trajectory: List[Tuple[str, float, float, str]] = []
@@ -555,9 +560,10 @@ def _make_case_agent(genome: Genome, cfg: EvoConfig, order, arity,
         action_order=order, arity=arity, alpha=cfg.alpha,
         gamma=cfg.reward_gamma, epsilon_start=max(cfg.epsilon_min, genome.epsilon),
         epsilon_end=max(cfg.epsilon_min, 0.02), episodes=max(1, episodes),
-        seed=seed, use_pref=True, pref_lr=cfg.pref_lr, beta=cfg.beta,
-        pref_sigma=cfg.sigma_pref, pref_mode=cfg.pref_mode,
-        pref_init=genome.pref_map(), switch_patience=genome.switch_patience,
+        seed=seed, use_pref=False, use_net=True, net=genome.net,
+        pref_lr=cfg.pref_lr, beta=cfg.beta,
+        pref_sigma=cfg.net_sigma, pref_mode=cfg.pref_mode,
+        switch_patience=genome.switch_patience,
     )
 
 
@@ -596,5 +602,5 @@ def bundle_validation(genome: Genome, bundle: Bundle, cfg: EvoConfig,
     """Greedy shaped evaluation of the genome on the multi-state bundle."""
     agent = train_genome_shaped(genome, bundle, cfg, seed, reward_config)
     return run_bundle_shaped(
-        agent, bundle, genome.state_pref, total_budget=cfg.total_budget,
+        agent, bundle, None, total_budget=cfg.total_budget,
         training=False, reward_config=reward_config)

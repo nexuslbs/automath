@@ -284,10 +284,18 @@ def _progress(state: State, target: Node) -> float:
     return min(1.0, size(top) / max(1, size(target)))
 
 
-def start_order(bundle: Bundle, state_pref: Sequence[float]
+def start_order(bundle: Bundle, start_scores: Optional[Sequence[float]] = None
                 ) -> List[str]:
-    """States ranked by the agent's STATE-PREFERENCE instinct (descending)."""
-    pairs = list(zip(bundle.ids(), list(state_pref)))
+    """States ranked by descending start score.
+
+    With the flavor-A net the score of a state is the net logit of its
+    ``'__start__'`` pseudo action (target + that state's initial stack), so the
+    same parameters that score in-state actions also choose the start order.
+    ``None`` means a uniform order (all scores 0.0).
+    """
+    if start_scores is None:
+        start_scores = [0.0] * len(bundle.states)
+    pairs = list(zip(bundle.ids(), list(start_scores)))
     pairs.sort(key=lambda p: (-p[1], p[0]))
     return [p[0] for p in pairs]
 
@@ -295,7 +303,7 @@ def start_order(bundle: Bundle, state_pref: Sequence[float]
 def run_bundle(
     agent,
     bundle: Bundle,
-    state_pref: Sequence[float],
+    start_scores: Optional[Sequence[float]] = None,
     total_budget: Optional[int] = None,
     training: bool = False,
     epsilon: float = 0.0,
@@ -305,7 +313,13 @@ def run_bundle(
 
     ``training`` collects the reward/td/context trajectory for the caller to
     feed into ``agent.update_pref``.  Evaluation is greedy (no exploration).
+    ``start_scores`` overrides the net-derived start order (pass a list for a
+    fixed order, e.g. the forced impossible-first trace).
     """
+    if start_scores is None:
+        start_scores = (agent.start_scores(bundle.states)
+                        if getattr(agent, "use_net", False)
+                        else [0.0] * len(bundle.states))
     budget = total_budget if total_budget is not None else bundle.total_budget
     envs = {s.sid: EvoEnv(FixedStateGoal(s.target),
                           initial_stack=s.initial_stack,
@@ -315,9 +329,9 @@ def run_bundle(
                  for s in bundle.states}
     trace: List[TraceEvent] = []
     trajectory: List[Tuple[str, float, float, str]] = []
-    order = start_order(bundle, state_pref)
+    order = start_order(bundle, start_scores)
     order_pos = {sid: i for i, sid in enumerate(order)}
-    pref_by_sid = {sid: float(state_pref[bundle.index(sid)])
+    pref_by_sid = {sid: float(start_scores[bundle.index(sid)])
                    for sid in order}
     # Within one sweep the agent tries every unsolved state once (ranked by its
     # state-preference instinct) before it may revisit one it abandoned; that
@@ -385,6 +399,7 @@ def run_bundle(
                     "after solve order=%s" % (order,)))
             continue
 
+        agent.set_target(bundle.by_id(current).target)
         key = bundle.by_id(current).key()
         if training:
             action = agent.epsilon_greedy(key, state, epsilon)

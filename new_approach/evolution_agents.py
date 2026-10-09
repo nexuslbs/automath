@@ -33,6 +33,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from .env import BUILD_ACTIONS
 from .evolution import EVO_ACTIONS
 from .nodes import Group, Node, One, Zero, nat
+from .target_features import (
+    PolicyNet,
+    START_ACTION,
+    features as _net_features,
+)
 
 # Reward node tag and the two guidance values it carries.
 T_REWARD = 20
@@ -162,6 +167,8 @@ class EvolutionAgent:
         pref_baseline: float = 0.1,
         pref_init: Optional[Dict[str, float]] = None,
         switch_patience: int = 6,
+        net: Optional[Sequence[float]] = None,
+        use_net: bool = False,
     ) -> None:
         self.action_order = tuple(action_order)
         self.arity = dict(arity) if arity is not None else CORE_ARITY
@@ -183,6 +190,15 @@ class EvolutionAgent:
         self.pref_baseline = pref_baseline
         # Unit C: the switching trigger instinct carried by the genome.
         self.switch_patience = switch_patience
+        # Flavor A: the target-conditioned policy net (flat MLP weights).  When
+        # present it REPLACES the flat per-action preference: the action score
+        # is q(goal,state,a) + beta * net.forward(features(target, stack, a)).
+        self.net: Optional[List[float]] = (
+            list(net) if net is not None else None)
+        self.use_net: bool = bool(use_net and self.net is not None)
+        # The target of the case currently being solved; the feature encoder
+        # needs it, and the bundle controller sets it on every state change.
+        self.target: Optional[Node] = None
         self.q: Dict[str, Dict[str, Dict[str, float]]] = {}
         self.rng = random.Random(seed)
         # The per-step-type preference (a priori valuation), keyed by
@@ -223,6 +239,33 @@ class EvolutionAgent:
     def _pget(self, action: str, ctx: str) -> float:
         return self.pref.get(self._pkey(action, ctx), 0.0)
 
+    # -- flavor A: target-conditioned net ---------------------------------
+    def set_target(self, target) -> None:
+        self.target = target
+
+    def set_net(self, net: Optional[Sequence[float]]) -> None:
+        self.net = list(net) if net is not None else None
+        self.use_net = self.net is not None
+
+    def net_logit(self, state, action: str) -> float:
+        """net.forward(features(target, stack, action)) with the CURRENT target."""
+        if self.net is None:
+            return 0.0
+        return PolicyNet.forward(
+            self.net, _net_features(self.target, state.stack, action))
+
+    def start_scores(self, bundle_states) -> List[float]:
+        """Score each bundle state as a pseudo action ('__start__') with the
+        SAME net, replacing the retired per-state preference vector."""
+        out: List[float] = []
+        for s in bundle_states:
+            if self.net is None:
+                out.append(0.0)
+            else:
+                out.append(PolicyNet.forward(self.net, _net_features(
+                    s.target, s.initial_stack, START_ACTION)))
+        return out
+
     # -- table access ---------------------------------------------------
     def _row(self, key: str, state) -> Dict[str, float]:
         return self.q.setdefault(key, {}).setdefault(state.canonical(), {})
@@ -231,14 +274,32 @@ class EvolutionAgent:
         return self.q.get(key, {}).get(state.canonical())
 
     def _score(self, key: str, state, action: str) -> float:
+        """q(goal,state,a) + beta * generalising term.
+
+        With the flavor-A net the generalising term is the target-conditioned
+        MLP logit; the tabular q stays as a per-(goal,state) residual and is 0
+        for rows the agent has not visited, so the net decides unsolved rows.
+        Without a net the legacy per-action preference is used unchanged.
+        """
         row = self.values(key, state) or {}
-        return row.get(action, 0.0) + self.beta * self._pget(
-            action, self._ctx(state))
+        q = row.get(action, 0.0)
+        if self.use_net:
+            return q + self.beta * self.net_logit(state, action)
+        return q + self.beta * self._pget(action, self._ctx(state))
 
     def best_action(self, key: str, state) -> Optional[str]:
         valid = self.valid(state.stack)
         if not valid:
             return None
+        if self.use_net:
+            # The SAME parameters score every action for any target; the
+            # deterministic action-order tie-break keeps rollouts reproducible.
+            best_a, best_s = None, float("-inf")
+            for a in valid:
+                s = self._score(key, state, a)
+                if s > best_s:
+                    best_s, best_a = s, a
+            return best_a
         row = self.values(key, state)
         if not row and not self.use_pref:
             return None
@@ -341,12 +402,21 @@ class EvolutionAgent:
         h.update(b"PREF|")
         for k in sorted(self.pref):
             h.update(("%s=%0.6f;" % (k, self.pref[k])).encode())
+        h.update(b"NET|")
+        if self.net is not None:
+            for i, v in enumerate(self.net):
+                h.update(("%d=%0.6f;" % (i, v)).encode())
         return h.hexdigest()
 
     def learned_states(self) -> int:
         return sum(len(states) for states in self.q.values())
 
     def pref_snapshot(self) -> str:
+        if self.use_net and self.net is not None:
+            return ("net[%d] mean=%+.3f min=%+.3f max=%+.3f"
+                    % (len(self.net),
+                       sum(self.net) / max(1, len(self.net)),
+                       min(self.net), max(self.net)))
         if not self.pref_ctx:
             return " ".join(
                 "%s=%+.3f" % (a, self._pget(a, ""))
@@ -448,6 +518,7 @@ def evaluate(agent: EvolutionAgent, cases: Sequence,
     import time
     result = EvalResult(total=len(cases))
     for case in cases:
+        agent.set_target(getattr(case.env.goal, "target", None))
         limit = max_steps if max_steps is not None else case.max_steps
         state = case.env.reset()
         t0 = time.perf_counter()

@@ -401,10 +401,10 @@ def run_stage_c(args) -> int:
 
     rng = random.Random(cfg.seed)
     population = init_population(cfg, bundle, rng)
-    print("initial random genome sample: pref[0:6]=%s state_pref=%s "
+    print("initial random genome sample: net[0:6]=%s len=%d "
           "eps=%.3f patience=%d"
-          % (["%+.2f" % v for v in population[0].pref[:6]],
-             ["%+.2f" % v for v in population[0].state_pref],
+          % (["%+.2f" % v for v in population[0].net[:6]],
+             len(population[0].net),
              population[0].epsilon, population[0].switch_patience))
 
     history = []
@@ -436,17 +436,14 @@ def run_stage_c(args) -> int:
     print("MULTI-STATE TOTAL-BUDGET TRACE (forced to start on the "
           "IMPOSSIBLE state s4)")
     best_agent = train_genome(best, bundle, cfg, cfg.seed + 777)
-    forced = Genome(pref=list(best.pref),
-                    state_pref=[0.0] * len(bundle.states),
-                    epsilon=0.02, switch_patience=best.switch_patience,
-                    gid="forced-impossible-first")
-    forced.state_pref[bundle.index("s4")] = 5.0
-    impossible_first = run_bundle(best_agent, bundle, forced.state_pref,
+    forced_scores = [0.0] * len(bundle.states)
+    forced_scores[bundle.index("s4")] = 5.0
+    impossible_first = run_bundle(best_agent, bundle, forced_scores,
                                   total_budget=cfg.total_budget,
                                   training=False)
     print("forced state instinct order: %s"
           % [bundle.by_id(s).name for s in start_order(bundle,
-                                                       forced.state_pref)])
+                                                       forced_scores)])
     print(render_trace(impossible_first, bundle))
     print("PER-STATE RESULT (impossible-first run):")
     for row in impossible_first.per_state_rows():
@@ -454,8 +451,8 @@ def run_stage_c(args) -> int:
 
     print("-" * 72)
     print("BEST GENOME instinct order: %s"
-          % [bundle.by_id(s).name for s in start_order(bundle,
-                                                       best.state_pref)])
+          % [bundle.by_id(s).name for s in
+             start_order(bundle, best_agent.start_scores(bundle.states))])
     print("BEST GENOME greedy trace:")
     print(render_trace(best._result, bundle))
     print("PER-STATE RESULT (best genome):")

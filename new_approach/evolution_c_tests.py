@@ -199,25 +199,19 @@ def check_crossover_inherits_genes() -> str:
     a = random_genome(rng, len(EVO_ORDER), 7, cfg, "a")
     b = random_genome(rng, len(EVO_ORDER), 7, cfg, "b")
     c = crossover(a, b, rng)
-    for i in range(len(a.pref)):
-        if c.pref[i] not in (a.pref[i], b.pref[i]):
+    for i in range(len(a.net)):
+        if c.net[i] not in (a.net[i], b.net[i]):
             raise CheckFailure("crossover_inherits",
-                               "pref gene %d is neither parent" % i)
-    for i in range(len(a.state_pref)):
-        if c.state_pref[i] not in (a.state_pref[i], b.state_pref[i]):
-            raise CheckFailure("crossover_inherits",
-                               "state gene %d is neither parent" % i)
+                               "net gene %d is neither parent" % i)
     d = c.cross_detail
-    if d["pref_from_a"] + d["pref_from_b"] != len(a.pref):
-        raise CheckFailure("crossover_inherits", "pref cross counts wrong")
-    if d["state_from_a"] + d["state_from_b"] != len(a.state_pref):
-        raise CheckFailure("crossover_inherits", "state cross counts wrong")
+    if d["net_from_a"] + d["net_from_b"] != len(a.net):
+        raise CheckFailure("crossover_inherits", "net cross counts wrong")
     if set(c.parents) != {"a", "b"}:
         raise CheckFailure("crossover_inherits", "parents not recorded")
-    return ("child inherits every gene from A or B; pref A/B=%d/%d state "
-            "A/B=%d/%d eps=%s pat=%s"
-            % (d["pref_from_a"], d["pref_from_b"], d["state_from_a"],
-               d["state_from_b"], d["epsilon_from"], d["patience_from"]))
+    return ("child inherits every net gene from A or B; net A/B=%d/%d "
+            "eps=%s pat=%s"
+            % (d["net_from_a"], d["net_from_b"], d["epsilon_from"],
+               d["patience_from"]))
 
 
 def check_mutation_bounded() -> str:
@@ -226,7 +220,7 @@ def check_mutation_bounded() -> str:
     rng = random.Random(11)
     g = random_genome(rng, len(EVO_ORDER), 7, cfg, "m")
     mutate(g, rng, cfg)
-    if any(abs(v) > 5.0 + 1e-9 for v in g.pref + g.state_pref):
+    if any(abs(v) > 5.0 + 1e-9 for v in g.net):
         raise CheckFailure("mutation_bounded", "gene escaped the clip")
     if not (0.02 - 1e-9 <= g.epsilon <= 0.8 + 1e-9):
         raise CheckFailure("mutation_bounded",
@@ -236,7 +230,7 @@ def check_mutation_bounded() -> str:
                            "patience out of range: %r" % g.switch_patience)
     return ("after a 100%% mutation pass: max|gene|=%.3f epsilon=%.3f "
             "patience=%d all within bounds"
-            % (max(abs(v) for v in g.pref + g.state_pref), g.epsilon,
+            % (max(abs(v) for v in g.net), g.epsilon,
                g.switch_patience))
 
 
@@ -257,12 +251,12 @@ def check_selection_elitism_and_size() -> str:
                                "elite fitness not preserved: %.6f vs %.6f"
                                % (new_pop[0].fitness, old_best))
         d = rec["offspring"][0]["cross_detail"]
-        if d["pref_from_a"] + d["pref_from_b"] != len(EVO_ORDER):
+        if d["net_from_a"] + d["net_from_b"] != len(new_pop[-1].net):
             raise CheckFailure("selection_elitism", "offspring genes not mixed")
         return ("population holds %d (elites=%d + offspring); elite fitness "
-                "preserved %.4f; first cross pref A/B=%d/%d"
-                % (len(new_pop), cfg.elites, old_best, d["pref_from_a"],
-                   d["pref_from_b"]))
+                "preserved %.4f; first cross net A/B=%d/%d"
+                % (len(new_pop), cfg.elites, old_best, d["net_from_a"],
+                   d["net_from_b"]))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

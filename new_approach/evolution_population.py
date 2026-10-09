@@ -1,11 +1,12 @@
 """Unit C: population evolution, selection, mixing and JSON persistence.
 
 Genome (the agent's heritable BASIC INSTINCT):
-* ``pref``            - per-step-type preference vector over the 21 extended
-                        actions (the Stage 3 instinct).
-* ``state_pref``      - per-state preference over the bundle's states: which
-                        state the agent chooses first and prefers when it
-                        switches.  This is the "best state-chooser" instinct.
+* ``net``             - flat weights of the target-conditioned PolicyNet (one
+                        tanh hidden layer).  The same parameters score every
+                        action for any (target, stack), and the bundle start
+                        order is scored by the same net over the ``__start__``
+                        pseudo action.  Replaces the retired flat ``pref`` and
+                        ``state_pref`` vectors.
 * ``epsilon``         - exploration temperament (initial epsilon).
 * ``switch_patience`` - stagnation window before a mid-state switch.
 
@@ -46,6 +47,7 @@ from .evolution_bundle import (
     run_bundle,
     trace_rows,
 )
+from .target_features import PolicyNet, net_init
 
 CHECKPOINT_VERSION = 1
 
@@ -68,6 +70,10 @@ class EvoConfig:
     alpha: float = 0.5
     sigma_pref: float = 0.5
     sigma_state: float = 0.5
+    # Flavor A: the genome is the flat weight vector of the target-conditioned
+    # PolicyNet; ``net_sigma`` is the initial/mutation scale of those weights.
+    net_hidden: int = PolicyNet.HIDDEN
+    net_sigma: float = 0.5
     pref_clip: float = 5.0
     epsilon_min: float = 0.02
     epsilon_max: float = 0.8
@@ -123,8 +129,12 @@ class EvoConfig:
 
 @dataclass
 class Genome:
-    pref: List[float]
-    state_pref: List[float]
+    # Flavor A: the heritable policy is the flat weight vector of a
+    # target-conditioned MLP (see target_features.PolicyNet).  The retired
+    # ``pref`` (21) and ``state_pref`` (7) flat vectors are GONE: the same net
+    # now scores every action for any (target, stack), and the bundle start
+    # order is scored by the same net over the '__start__' pseudo action.
+    net: List[float]
     epsilon: float
     switch_patience: int
     gid: str = ""
@@ -141,8 +151,7 @@ class Genome:
 
     def genes(self) -> dict:
         return {
-            "pref": [round(v, 6) for v in self.pref],
-            "state_pref": [round(v, 6) for v in self.state_pref],
+            "net": [round(v, 6) for v in self.net],
             "epsilon": round(self.epsilon, 6),
             "switch_patience": int(self.switch_patience),
         }
@@ -164,9 +173,13 @@ class Genome:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Genome":
+        # A legacy checkpoint (pre-flavor-A) has no ``net``; fall back to a
+        # zero net of the right length so loading never crashes, and let the
+        # caller warm-start from that neutral policy.
+        net = ([float(x) for x in data["net"]] if "net" in data
+               else [0.0] * PolicyNet.size())
         return cls(
-            pref=[float(x) for x in data["pref"]],
-            state_pref=[float(x) for x in data["state_pref"]],
+            net=net,
             epsilon=float(data["epsilon"]),
             switch_patience=int(data["switch_patience"]),
             gid=data.get("gid", ""),
@@ -180,16 +193,20 @@ class Genome:
             steps=int(data.get("steps", 0)),
         )
 
-    def pref_map(self) -> Dict[str, float]:
-        return {a: self.pref[i] for i, a in enumerate(EVO_ORDER)}
+    def net_weights(self) -> List[float]:
+        return list(self.net)
 
 
 def random_genome(rng: random.Random, n_actions: int, n_states: int,
                   cfg: EvoConfig, gid: str) -> Genome:
+    """A random flavor-A genome (flat PolicyNet weights).
+
+    ``n_actions`` / ``n_states`` are accepted only so callers written for the
+    retired ``pref`` / ``state_pref`` signature keep working; they are ignored
+    because the net input/output size is fixed by ``PolicyNet``.
+    """
     return Genome(
-        pref=[rng.gauss(0.0, cfg.sigma_pref) for _ in range(n_actions)],
-        state_pref=[rng.gauss(0.0, cfg.sigma_state)
-                    for _ in range(n_states)],
+        net=net_init(rng, cfg.net_sigma),
         epsilon=rng.uniform(max(0.05, cfg.epsilon_min), 0.5),
         switch_patience=rng.randint(3, 10),
         gid=gid,
@@ -200,7 +217,7 @@ def random_genome(rng: random.Random, n_actions: int, n_states: int,
 def clone_genome(g: Genome, gid: Optional[str] = None,
                  origin: str = "elite") -> Genome:
     return Genome(
-        pref=list(g.pref), state_pref=list(g.state_pref),
+        net=list(g.net),
         epsilon=g.epsilon, switch_patience=g.switch_patience,
         gid=gid if gid is not None else g.gid,
         parents=tuple(g.parents), origin=origin,
@@ -212,25 +229,16 @@ def clone_genome(g: Genome, gid: Optional[str] = None,
 
 
 def crossover(a: Genome, b: Genome, rng: random.Random) -> Genome:
-    """Uniform per-gene crossover; records exactly which genes came from whom."""
-    pref: List[float] = []
-    pa = pb = 0
-    for i in range(len(a.pref)):
+    """Uniform per-gene crossover over the flat net; records A/B provenance."""
+    net: List[float] = []
+    na = nb = 0
+    for i in range(len(a.net)):
         if rng.random() < 0.5:
-            pref.append(a.pref[i])
-            pa += 1
+            net.append(a.net[i])
+            na += 1
         else:
-            pref.append(b.pref[i])
-            pb += 1
-    state_pref: List[float] = []
-    sa = sb = 0
-    for i in range(len(a.state_pref)):
-        if rng.random() < 0.5:
-            state_pref.append(a.state_pref[i])
-            sa += 1
-        else:
-            state_pref.append(b.state_pref[i])
-            sb += 1
+            net.append(b.net[i])
+            nb += 1
     if rng.random() < 0.5:
         eps, eps_src = a.epsilon, "A"
     else:
@@ -240,26 +248,20 @@ def crossover(a: Genome, b: Genome, rng: random.Random) -> Genome:
     else:
         pat, pat_src = b.switch_patience, "B"
     return Genome(
-        pref=pref, state_pref=state_pref, epsilon=eps,
+        net=net, epsilon=eps,
         switch_patience=pat, parents=(a.gid, b.gid), origin="offspring",
         cross_detail={
-            "pref_from_a": pa, "pref_from_b": pb,
-            "state_from_a": sa, "state_from_b": sb,
+            "net_from_a": na, "net_from_b": nb,
             "epsilon_from": eps_src, "patience_from": pat_src,
         },
     )
 
 
 def mutate(g: Genome, rng: random.Random, cfg: EvoConfig) -> Genome:
-    for i in range(len(g.pref)):
+    for i in range(len(g.net)):
         if rng.random() < cfg.mutation_rate:
-            g.pref[i] = _clamp(g.pref[i] + rng.gauss(0.0, cfg.mutation_sigma),
-                               -cfg.pref_clip, cfg.pref_clip)
-    for i in range(len(g.state_pref)):
-        if rng.random() < cfg.mutation_rate:
-            g.state_pref[i] = _clamp(
-                g.state_pref[i] + rng.gauss(0.0, cfg.mutation_sigma),
-                -cfg.pref_clip, cfg.pref_clip)
+            g.net[i] = _clamp(g.net[i] + rng.gauss(0.0, cfg.mutation_sigma),
+                              -cfg.pref_clip, cfg.pref_clip)
     if rng.random() < cfg.mutation_rate:
         g.epsilon = _clamp(g.epsilon + rng.gauss(0.0, 0.05),
                            cfg.epsilon_min, cfg.epsilon_max)
@@ -283,12 +285,13 @@ def make_agent(genome: Genome, cfg: EvoConfig, seed: int) -> EvolutionAgent:
         epsilon_end=max(cfg.epsilon_min, 0.02),
         episodes=max(1, cfg.episodes),
         seed=seed,
-        use_pref=True,
+        use_pref=False,
+        use_net=True,
+        net=genome.net,
         pref_lr=cfg.pref_lr,
         beta=cfg.beta,
-        pref_sigma=cfg.sigma_pref,
+        pref_sigma=cfg.net_sigma,
         pref_mode=cfg.pref_mode,
-        pref_init=genome.pref_map(),
         switch_patience=genome.switch_patience,
     )
 
@@ -298,7 +301,7 @@ def train_genome(genome: Genome, bundle: Bundle, cfg: EvoConfig,
     agent = make_agent(genome, cfg, seed)
     for ep in range(max(1, cfg.episodes)):
         epsilon = agent._epsilon(ep)
-        result = run_bundle(agent, bundle, genome.state_pref,
+        result = run_bundle(agent, bundle, None,
                             total_budget=cfg.total_budget, training=True,
                             epsilon=epsilon)
         agent.update_pref(result.trajectory)
@@ -308,7 +311,7 @@ def train_genome(genome: Genome, bundle: Bundle, cfg: EvoConfig,
 def evaluate_genome(genome: Genome, bundle: Bundle, cfg: EvoConfig,
                     seed: int) -> BundleResult:
     agent = train_genome(genome, bundle, cfg, seed)
-    result = run_bundle(agent, bundle, genome.state_pref,
+    result = run_bundle(agent, bundle, None,
                         total_budget=cfg.total_budget, training=False)
     genome.fitness = result.total_reward
     genome.solver_score = result.solver_score()
@@ -404,14 +407,9 @@ def evolve_one_generation(population: List[Genome], gen: int, bundle: Bundle,
                 child = clone_genome(seed_parent,
                                      gid="g%05d-c%03d" % (gen + 1, i),
                                      origin="restart")
-                for j in range(len(child.pref)):
-                    child.pref[j] = _clamp(
-                        child.pref[j] + rng.gauss(0.0, cfg.restart_sigma),
-                        -cfg.pref_clip, cfg.pref_clip)
-                for j in range(len(child.state_pref)):
-                    child.state_pref[j] = _clamp(
-                        child.state_pref[j]
-                        + rng.gauss(0.0, cfg.restart_sigma),
+                for j in range(len(child.net)):
+                    child.net[j] = _clamp(
+                        child.net[j] + rng.gauss(0.0, cfg.restart_sigma),
                         -cfg.pref_clip, cfg.pref_clip)
                 child.epsilon = _clamp(
                     seed_parent.epsilon + rng.gauss(0.0, 0.1),

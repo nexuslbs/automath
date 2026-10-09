@@ -18,7 +18,7 @@ from typing import List, Tuple
 
 from .env import FixedStateGoal
 from .evolution import EVO_AXIOMS, EvoEnv, ev_add, ev_mul, ev_sub, nat
-from .evolution_bundle import make_demo_bundle
+from .evolution_bundle import make_demo_bundle, start_order
 from .evolution_agents import EVO_ARITY, EVO_ORDER, EvolutionAgent
 from .evolution_population import EvoConfig, Genome, random_genome
 from .evolution_rewards import (
@@ -40,9 +40,17 @@ from .evolution_semi import (
     bundle_validation,
     core_validation_shaped,
     evolve_one_generation_shaped,
+    make_shaped_agent,
     run_bundle_shaped,
 )
 from .nodes import Group, One, Zero
+from .target_features import (
+    PolicyNet,
+    START_ACTION,
+    features,
+    net_init,
+    net_size,
+)
 from .tests import CheckFailure
 
 SEED = 20261009
@@ -213,10 +221,8 @@ def check_shaped_run_items() -> str:
     rng = random.Random(SEED)
     genome = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg,
                            "g00001-r000")
-    agent = EvolutionAgent(action_order=EVO_ORDER, arity=EVO_ARITY, seed=SEED,
-                           episodes=1, use_pref=True, pref_init=genome.pref_map(),
-                           switch_patience=genome.switch_patience)
-    res = run_bundle_shaped(agent, bundle, genome.state_pref,
+    agent = make_shaped_agent(genome, cfg, SEED)
+    res = run_bundle_shaped(agent, bundle, None,
                             total_budget=cfg.total_budget, training=False)
     already = sum(1 for e in res.reward_log if e.get("already_goal"))
     if len(res.reward_log) != res.total_steps + already:
@@ -342,3 +348,77 @@ def run() -> int:
 if __name__ == "__main__":
     import sys
     sys.exit(run())
+
+
+# --------------------------------------------------------------------------
+# pytest-style tests for the flavor-A target-conditioned net policy.
+# Run with:  python -m pytest new_approach/evolution_semi_tests.py
+# --------------------------------------------------------------------------
+
+def test_net_forward_shape() -> None:
+    """The policy net has the fixed genome size and a finite scalar output."""
+    rng = random.Random(SEED)
+    net = net_init(rng, 0.5)
+    assert len(net) == net_size()
+    assert net_size() == PolicyNet.size()
+    x = features(_mini_target(), (), "PushZero")
+    assert len(x) == PolicyNet.IN_DIM
+    out = PolicyNet.forward(net, x)
+    assert isinstance(out, float)
+    assert out == out  # not NaN
+
+
+def test_serialization_has_net_and_no_pref() -> None:
+    """A genome serializes with ``net`` and WITHOUT pref/state_pref."""
+    rng = random.Random(SEED)
+    cfg = _cfg()
+    g = random_genome(rng, len(EVO_ORDER), 7, cfg, "g-net")
+    genes = g.genes()
+    assert "net" in genes
+    assert "pref" not in genes and "state_pref" not in genes
+    d = g.to_dict()
+    assert "net" in d
+    assert "pref" not in d and "state_pref" not in d
+    back = Genome.from_dict(d)
+    assert back.net == g.net
+    assert back.epsilon == g.epsilon
+    assert back.switch_patience == g.switch_patience
+    assert back.genes() == genes
+
+
+def test_start_order_scored_by_net() -> None:
+    """The bundle start order is the net's ranking over '__start__'."""
+    cfg = _cfg()
+    bundle = make_demo_bundle(cfg.total_budget)
+    rng = random.Random(SEED)
+    g = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg, "g-order")
+    agent = make_shaped_agent(g, cfg, SEED)
+    scores = agent.start_scores(bundle.states)
+    assert len(scores) == len(bundle.states)
+    order = start_order(bundle, scores)
+    expected = [sid for sid, _ in sorted(zip(bundle.ids(), scores),
+                                         key=lambda p: (-p[1], p[0]))]
+    assert order == expected
+    # The same net scores differently for a different bundle (target + stack
+    # enter the feature vector): the policy is target-conditioned.
+    other = random_genome(random.Random(SEED + 1), len(EVO_ORDER), 7, cfg, "g2")
+    other_agent = make_shaped_agent(other, cfg, SEED)
+    assert other_agent.start_scores(bundle.states) != scores
+
+
+def test_action_scores_same_net_new_targets() -> None:
+    """The SAME net parameters yield a valid greedy action for any target."""
+    cfg = _cfg()
+    bundle = make_demo_bundle(cfg.total_budget)
+    rng = random.Random(SEED)
+    g = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg, "g-policy")
+    agent = make_shaped_agent(g, cfg, SEED)
+    s1, s2 = bundle.by_id("s1"), bundle.by_id("s2")
+    env = EvoEnv(FixedStateGoal(s1.target))
+    st = env.reset()
+    agent.set_target(s1.target)
+    a1 = agent.best_action(s1.key(), st)
+    assert a1 in agent.valid(st.stack)
+    agent.set_target(s2.target)
+    a2 = agent.best_action(s2.key(), st)
+    assert a2 in agent.valid(st.stack)

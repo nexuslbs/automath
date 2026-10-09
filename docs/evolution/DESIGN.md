@@ -165,25 +165,31 @@ Command:
 
 ```sh
 /opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3  --episodes 60
-/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3  --episodes 600
-/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3e --episodes 600
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3  --episodes 2000
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3e --episodes 200
 ```
 
-Headline measured outcomes (raw output in the evidence file):
+Headline measured outcomes (config `pref_mode=td, pref_lr=0.2, beta=1.0,
+sigma=0.5`; raw output in the evidence file):
 
 | run | training | validation |
 | --- | -------- | ---------- |
 | Stage 2 (guidance), 60 ep | 10/10 | 33/33 |
-| Stage 3 (valuation), 60 ep, seed 20261009 | 6/10 | 18/33 |
-| Stage 3, 600 ep, seed 20261009 | 8/10 | 25/33 |
-| Stage 3, 600 ep, 6-seed range | 5-8/10 | 14-25/33 (mean 21.5) |
+| Stage 2 extended, 200 ep | 11/11 | 114/114 |
+| Stage 3 (valuation), 60 ep, seed 20261009 | 5/10 | 16/33 |
+| Stage 3, 2000 ep, seed 20261009 | 8/10 | 24/33 |
+| Stage 3, 2000 ep, 6-seed range | 1-8/10 | 10-26/33 (mean 21.7, median 24) |
+| Stage 3 extended, 200 ep | 1/11 | 16/114 |
 | supervised planner | 10/10 | 33/33 |
 | pure-reward control, 60 ep | - | 14/33 |
-| pure-reward control, 600 ep | - | 19/33 |
+| pure-reward control, 2000 ep | - | 19/33 |
 
 Honest reading: the stochastic step-type valuation DOES converge on the core
 U2 set (a rising success/reward curve that stabilises), and at the longer
-budget it exceeds the pure-reward control on average, but it is seed-sensitive
-and does NOT reach the supervisor or Stage 2. On the long-horizon extended
-complex-scenario suite (21 actions, plans up to 17 steps) it does NOT converge
-at this budget (12-13/114 validation), which is reported as a negative result.
+budget it exceeds the pure-reward control on average (median 24/33 vs 19/33),
+but it is seed-sensitive (one of six seeds collapses to 10/33) and it does NOT
+reach the supervisor or Stage 2. On the long-horizon extended complex-scenario
+suite (21 actions, plans up to 17 steps) it does NOT converge at this budget
+(1/11 training, 16/114 validation), which is reported as a negative result.
+Using `reinforce` instead of `td`, or context-conditioned preferences, did not
+improve these numbers.

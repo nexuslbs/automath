@@ -288,17 +288,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="evolution pipeline runner")
     p.add_argument("--stage", choices=("baseline", "2", "3", "2e", "3e", "all"),
                    default="all")
-    p.add_argument("--episodes", type=int, default=600)
+    p.add_argument("--episodes", type=int, default=2000)
     p.add_argument("--seed", type=int, default=SEED)
     p.add_argument("--alpha", type=float, default=0.5)
     p.add_argument("--gamma", type=float, default=0.95)
     p.add_argument("--epsilon-start", dest="epsilon_start", type=float, default=0.5)
     p.add_argument("--epsilon-end", dest="epsilon_end", type=float, default=0.02)
-    p.add_argument("--pref-lr", dest="pref_lr", type=float, default=0.1)
+    p.add_argument("--pref-lr", dest="pref_lr", type=float, default=0.2)
     p.add_argument("--beta", type=float, default=1.0)
     p.add_argument("--pref-sigma", dest="pref_sigma", type=float, default=0.5)
     p.add_argument("--pref-mode", dest="pref_mode", choices=("td", "reinforce"),
-                   default="reinforce")
+                   default="td")
     p.add_argument("--pref-ctx", dest="pref_ctx", action="store_true",
                    default=False)
     p.add_argument("--pref-baseline", dest="pref_baseline", type=float,

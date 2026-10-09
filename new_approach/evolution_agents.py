@@ -186,14 +186,11 @@ class EvolutionAgent:
         self.pref: Dict[str, float] = {}
         self._pref_base: Dict[str, float] = {}
         if use_pref:
+            contexts = CONTEXTS if pref_ctx else ("",)
             for action in self.action_order:
-                for ctx in CONTEXTS:
-                    if not pref_ctx and ctx != "":
-                        continue
+                for ctx in contexts:
                     self.pref["%s@%s" % (action, ctx)] = self.rng.gauss(
                         0.0, pref_sigma)
-                if not pref_ctx:
-                    break
 
     # -- action/context helpers -----------------------------------------
     def valid(self, stack: Sequence[Node]) -> Tuple[str, ...]:

@@ -183,7 +183,11 @@ class Harness:
             total += reward
             steps += 1
             if collect:
-                trace.append({"inputs": xs, "chosen": chosen, "reward": reward})
+                trace.append({"step": steps, "action": action.key(),
+                              "state_vector": list(env.state_vector(result.state)),
+                              "objective_vector": list(flags),
+                              "reward": reward, "goal": bool(done_full),
+                              "inputs": xs, "chosen": chosen})
             prev_flags = flags
             state = result.state
             actions = next_actions

@@ -1,0 +1,50 @@
+{
+  "spec_id": "spec_dynamic_group_deep",
+  "description": "HELD-OUT (Unit D-2 eval) DEEPER dynamic grouping with a LARGER arity (3): combine sum(1,2,5) into a dynamic grouping node whose value is 8, then set the objective.",
+  "node_types": {
+    "num": {
+      "semantics": "literal",
+      "role": "value",
+      "value_field": "n",
+      "fields": [{"name": "n", "type": "int"}]
+    },
+    "op": {
+      "semantics": "literal",
+      "role": "tag",
+      "value_field": "s",
+      "fields": [{"name": "s", "type": "str"}]
+    },
+    "grp": {
+      "semantics": "combination",
+      "role": "plain",
+      "fields": [{"name": "tag", "type": "node"}, {"name": "items", "type": "nodes"}]
+    },
+    "flag": {
+      "semantics": "literal",
+      "role": "objective",
+      "value_field": "v",
+      "fields": [{"name": "v", "type": "int"}]
+    }
+  },
+  "combine_axioms": [
+    {"id": "ax_sum", "tag": "sum", "arity": 3, "op": "sum", "active": true}
+  ],
+  "build_axioms": [],
+  "dynamic_axioms": [],
+  "nodes": {
+    "n1": {"type": "num", "n": 1},
+    "n2": {"type": "num", "n": 2},
+    "n5": {"type": "num", "n": 5},
+    "t_sum": {"type": "op", "s": "sum"},
+    "o": {"type": "flag", "v": 0}
+  },
+  "objectives": {"o": 1},
+  "guards": {
+    "o": {"op": "exists_value", "cmp": "eq", "value": 8, "combination_only": true}
+  },
+  "dynamic_node_type": "grp",
+  "max_combine_arity": 3,
+  "step_cost": 0.01,
+  "goal_reward": 1.0,
+  "max_steps": 10
+}

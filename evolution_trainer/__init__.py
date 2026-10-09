@@ -24,10 +24,19 @@ from .genome import MixResult, PolicyNet, mix_genomes, mutate_genome
 from .harness import Harness, RolloutResult
 from .mix_train import MixTrainer
 from .rl_train import ReinforceTrainer
+from .curriculum import (
+    CurriculumTrainer,
+    bfs_min_steps,
+    distance_to_goal,
+    minimal_and_max,
+    run_evolution,
+    shortest_path_gate,
+)
 
 __all__ = [
     "ActionFeaturizer",
     "Agent",
+    "CurriculumTrainer",
     "EpisodeResult",
     "EvoConfig",
     "EvolutionTrainer",
@@ -37,8 +46,13 @@ __all__ = [
     "PolicyNet",
     "ReinforceTrainer",
     "RolloutResult",
+    "bfs_min_steps",
+    "distance_to_goal",
+    "minimal_and_max",
     "mix_genomes",
     "mutate_genome",
+    "run_evolution",
+    "shortest_path_gate",
     "state_dim",
     "state_features",
 ]

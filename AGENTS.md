@@ -32,6 +32,7 @@ library test runners are the primary contract; pytest is a mirror.
 /opt/automath/venv/bin/python -m pytest dynamic_env/tests.py   # pytest mirror
 /opt/automath/venv/bin/python -m evolution_trainer.tests       # evolution, 13 checks
 /opt/automath/venv/bin/python -m evolution_trainer.arms_tests  # Unit C arms, 10 checks
+/opt/automath/venv/bin/python -m evolution_trainer.curriculum_tests  # Unit D, 7 checks
 /opt/automath/venv/bin/python -m pytest -q evolution_trainer/tests.py  # pytest mirror
 ```
 
@@ -81,6 +82,23 @@ a dependency to build or test it.
 * `EvolutionTrainer.run(warm_start=...)` is the only Unit B change; the default
   call is unchanged, so `train.py` and the pure evolution arm keep Unit B
   behaviour. See `docs/evolution/APPROACH_COMPARISON.md`.
+
+## Curriculum contract (Unit D)
+
+* `evolution_trainer/curriculum.py` drives the Unit C-selected fixed-weight
+  evolution backbone through four stages (S1 minimal, S2 deterministic
+  dynamic-node tests under strict steps, S3 strict to free with wrong steps
+  DISCARDED, S4 multi-step). Standard library only.
+* `bfs_min_steps` (runner) MUST equal the engine's `minimal_length` and
+  `bfs_minimal_word`; the S4 MAX is `min+2`, or `max(min+2, min*2)` for a spec
+  whose id contains `axiom`. `distance_to_goal` + `shortest_path_gate` make
+  "only one step is correct per state" mechanical.
+* `EvolutionTrainer.step_gate` (default `None`) and `run(on_generation=None)`
+  are additive hooks; the default paths keep Unit B behaviour.
+* Held-out cases are DATA under `data/dynamic_env/heldout/` and are never used
+  in training. `evolution_trainer/heldout.py` scores an optional checkpoint and
+  reports the trace (objective vector, action, reward, step), solved/total and
+  wall time. See `docs/evolution/CURRICULUM.md`.
 
 ## Branches
 

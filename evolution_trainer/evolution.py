@@ -167,6 +167,11 @@ class EvolutionTrainer:
         self._serial = 0
         self.generation_subagents: List[Dict[str, Any]] = []
         self._next_population: List[Agent] = []
+        #: Optional ``gate(env, state, action) -> bool`` used by the Unit D
+        #: curriculum. When set, a rejected action is DISCARDED: the state does
+        #: not change, one step is spent (``-step_cost``) and the agent chooses
+        #: again. ``None`` (the default) is exactly Unit B behaviour.
+        self.step_gate = None
 
     # -- ids ---------------------------------------------------------------
     def _next_aid(self, generation: int, tag: str) -> str:
@@ -243,6 +248,12 @@ class EvolutionTrainer:
 
         while steps < max_steps and actions:
             action = self._choose(agent, env, state, actions, subgoal_mask)
+            if self.step_gate is not None and not self.step_gate(env, state, action):
+                # Wrong step DISCARDED (deterministic, no state change): the
+                # agent spends a step and tries again from the SAME state.
+                total -= self.config.step_cost
+                steps += 1
+                continue
             result = env.step(state, action)
             flags = env.objective_vector(result.state)
             reward = -self.config.step_cost
@@ -623,7 +634,8 @@ class EvolutionTrainer:
                 os.unlink(tmp)
 
     # -- driver ------------------------------------------------------------
-    def run(self, warm_start: Optional[Sequence[Sequence[float]]] = None
+    def run(self, warm_start: Optional[Sequence[Sequence[float]]] = None,
+            on_generation: Optional[Callable[[int, Dict[str, Any]], bool]] = None
             ) -> List[Dict[str, Any]]:
         """Evolve. ``warm_start`` optionally supplies founder genomes.
 
@@ -631,6 +643,11 @@ class EvolutionTrainer:
         genome an RL warm-start already learned (plus the caller's own mutated
         copies). The default ``None`` is exactly Unit B's behaviour: random
         founders, so ``train.py`` and the pure evolution arm are unchanged.
+
+        ``on_generation(generation, record) -> bool`` is an optional Unit D
+        hook: when it returns True the run stops after writing that generation's
+        checkpoints (checkpoint-based early stop). The default ``None`` runs
+        every generation.
         """
         if warm_start:
             population: List[Agent] = []
@@ -650,5 +667,7 @@ class EvolutionTrainer:
             record = self._generation_record(generation, population, births)
             self.history.append(record)
             self._write_generation(generation, record)
+            if on_generation is not None and on_generation(generation, record):
+                break
             population = self._next_population
         return self.history

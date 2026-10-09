@@ -1,16 +1,17 @@
-"""Pipeline runner for the evolution branch: baselines and Stage 2.
+"""Pipeline runner for the evolution branch: baselines, Stage 2, Stage 3.
 
 Commands (pure standard library, seeded, bounded)::
 
     /opt/automath/venv/bin/python -m new_approach.evolution_run --stage baseline
     /opt/automath/venv/bin/python -m new_approach.evolution_run --stage 2
+    /opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3
     /opt/automath/venv/bin/python -m new_approach.evolution_run --stage 2e
+    /opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3e
 
 `baseline` reproduces the U2 supervised planner (33/33) and the pure-reward
-control (14/33) on the SAME 33 new-initial-state validation cases at both the
-operator budget (60 episodes) and the longer budget, so the comparison in the
-evidence is measured in one process, not quoted.  `2` runs the core comparison;
-`2e` runs the extended complex-scenario suite.
+control (14/33) on the SAME 33 new-initial-state validation cases, so the
+comparison in the evidence is measured in one process, not quoted.  `2`/`3`
+run the core comparison; `2e`/`3e` run the extended complex-scenario suite.
 """
 
 from __future__ import annotations
@@ -20,24 +21,25 @@ import statistics
 import sys
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from .agent import TabularAgent
-from .env import FixedStateGoal
-from .evolution import EvoEnv, scenario_cases
+from .env import FixedStateGoal, MinimalEnv
+from .evolution import EvoEnv, scenario_cases, scenarios, sem_plan
 from .evolution_agents import (
     CORE_ARITY,
     CORE_ORDER,
     EVO_ARITY,
     EVO_ORDER,
     EvalResult,
+    EvolutionAgent,
     Guidance,
-    GuidedQAgent,
     TrainStats,
     evaluate,
     read_reward,
     reward_node,
     train_guided,
+    train_valuation,
 )
 from .u2 import (
     curriculum as u2_curriculum,
@@ -63,15 +65,19 @@ class SimpleCase:
 
 
 def core_train_cases() -> List[SimpleCase]:
-    return [SimpleCase(c.name, c.key, c.env, c.max_steps,
-                       tuple(c.expected_word), c.level)
-            for c in u2_training_cases()]
+    out = []
+    for c in u2_training_cases():
+        out.append(SimpleCase(c.name, c.key, c.env, c.max_steps,
+                              tuple(c.expected_word), c.level))
+    return out
 
 
 def core_validation_cases() -> List[SimpleCase]:
-    return [SimpleCase(c.name, c.key, c.env, c.max_steps,
-                       tuple(c.expected_word), c.level)
-            for c in u2_validation_cases(list(u2_curriculum()))]
+    out = []
+    for c in u2_validation_cases(list(u2_curriculum())):
+        out.append(SimpleCase(c.name, c.key, c.env, c.max_steps,
+                              tuple(c.expected_word), c.level))
+    return out
 
 
 def evo_train_cases() -> List[SimpleCase]:
@@ -89,8 +95,8 @@ def evo_validation_cases() -> List[SimpleCase]:
     for name, target, stack, level, expected in scenario_cases(True):
         env = EvoEnv(FixedStateGoal(target), initial_stack=stack,
                      max_actions=len(expected) + 2)
-        out.append(SimpleCase(name, "S:" + target.canonical(), env,
-                              len(expected) + 2, expected, level))
+        key = "S:" + target.canonical()
+        out.append(SimpleCase(name, key, env, len(expected) + 2, expected, level))
     return out
 
 
@@ -162,8 +168,20 @@ def run_baseline(episodes: int, seed: int = SEED) -> int:
 
 
 # --------------------------------------------------------------------------
-# Stage 2 (core) and Stage 2e (extended)
+# Stage 2 (core) and Stage 3 (core)
 # --------------------------------------------------------------------------
+
+def _agent(use_pref: bool, action_order, arity, episodes: int, args) -> EvolutionAgent:
+    return EvolutionAgent(
+        action_order=action_order, arity=arity,
+        episodes=episodes, seed=args.seed,
+        alpha=args.alpha, gamma=args.gamma,
+        epsilon_start=args.epsilon_start, epsilon_end=args.epsilon_end,
+        use_pref=use_pref, pref_lr=args.pref_lr, beta=args.beta,
+        pref_sigma=args.pref_sigma, pref_mode=args.pref_mode,
+        pref_ctx=args.pref_ctx, pref_baseline=args.pref_baseline,
+    )
+
 
 def run_stage2(episodes: int, args) -> int:
     train = core_train_cases()
@@ -177,10 +195,7 @@ def run_stage2(episodes: int, args) -> int:
     print("episodes=%d seed=%d alpha=%.2f gamma=%.2f eps=%.2f->%.2f"
           % (episodes, args.seed, args.alpha, args.gamma,
              args.epsilon_start, args.epsilon_end))
-    agent = GuidedQAgent(action_order=CORE_ORDER, arity=CORE_ARITY,
-                         episodes=episodes, seed=args.seed, alpha=args.alpha,
-                         gamma=args.gamma, epsilon_start=args.epsilon_start,
-                         epsilon_end=args.epsilon_end)
+    agent = _agent(False, CORE_ORDER, CORE_ARITY, episodes, args)
     gd = Guidance(evo=False)
     register(gd, train)
     t0 = time.perf_counter()
@@ -199,31 +214,69 @@ def run_stage2(episodes: int, args) -> int:
     return 0
 
 
-def run_stage2e(episodes: int, args) -> int:
+def run_stage3(episodes: int, args) -> int:
+    train = core_train_cases()
+    val = core_validation_cases()
+    hdr("STAGE 3 (core U2): scaffolding removed, stochastic step-type "
+        "valuation")
+    print("no reward node; pref_mode=%s pref_lr=%.3f beta=%.3f sigma=%.3f"
+          % (args.pref_mode, args.pref_lr, args.beta, args.pref_sigma))
+    agent = _agent(True, CORE_ORDER, CORE_ARITY, episodes, args)
+    print("initial random per-step-type preference: %s"
+          % agent.pref_snapshot())
+    t0 = time.perf_counter()
+    stats = train_valuation(agent, train, episodes)
+    wall = time.perf_counter() - t0
+    print_curve("Stage 3", stats)
+    tr = evaluate(agent, train)
+    va = evaluate(agent, val)
+    eval_line("Stage 3 final training", tr)
+    eval_line("Stage 3 validation (new initial states)", va)
+    print("final shaped step-type preference: %s" % agent.pref_snapshot())
+    print("train_wall=%.6fs digest=%s" % (wall, agent.digest()))
+    print("STAGE3_TRAIN=%d/%d STAGE3_VAL=%d/%d"
+          % (tr.passed, tr.total, va.passed, va.total))
+    print("STAGE3_DIGEST=%s" % agent.digest())
+    return 0
+
+
+# --------------------------------------------------------------------------
+# Stage 2e / 3e: the extended complex-scenario suite
+# --------------------------------------------------------------------------
+
+def run_stage_ext(stage: int, episodes: int, args) -> int:
     train = evo_train_cases()
     val = evo_validation_cases()
-    hdr("STAGE 2 (extended %d complex scenarios)" % len(train))
+    label = "STAGE %d (extended %d complex scenarios)" % (
+        stage, len(train))
+    hdr(label)
     print("training scenarios=%d validation new-initial-states=%d "
           "actions=%d episodes=%d seed=%d"
           % (len(train), len(val), len(EVO_ORDER), episodes, args.seed))
-    agent = GuidedQAgent(action_order=EVO_ORDER, arity=EVO_ARITY,
-                         episodes=episodes, seed=args.seed, alpha=args.alpha,
-                         gamma=args.gamma, epsilon_start=args.epsilon_start,
-                         epsilon_end=args.epsilon_end)
-    gd = Guidance(evo=True)
-    register(gd, train)
-    t0 = time.perf_counter()
-    stats = train_guided(agent, train, episodes, gd)
+    use_pref = (stage == 3)
+    agent = _agent(use_pref, EVO_ORDER, EVO_ARITY, episodes, args)
+    if use_pref:
+        print("initial random per-step-type preference: %s"
+              % agent.pref_snapshot())
+        t0 = time.perf_counter()
+        stats = train_valuation(agent, train, episodes)
+    else:
+        gd = Guidance(evo=True)
+        register(gd, train)
+        t0 = time.perf_counter()
+        stats = train_guided(agent, train, episodes, gd)
+        print("guidance hits=%d misses=%d" % (gd.hits, gd.misses))
     wall = time.perf_counter() - t0
-    print("guidance hits=%d misses=%d" % (gd.hits, gd.misses))
-    print_curve("Stage 2 extended", stats)
+    print_curve("Stage %d extended" % stage, stats)
     tr = evaluate(agent, train)
     va = evaluate(agent, val)
-    eval_line("Stage 2 extended training", tr)
-    eval_line("Stage 2 extended validation", va)
+    eval_line("Stage %d extended training" % stage, tr)
+    eval_line("Stage %d extended validation" % stage, va)
+    if use_pref:
+        print("final shaped step-type preference: %s" % agent.pref_snapshot())
     print("train_wall=%.6fs digest=%s" % (wall, agent.digest()))
-    print("STAGE2E_TRAIN=%d/%d STAGE2E_VAL=%d/%d"
-          % (tr.passed, tr.total, va.passed, va.total))
+    print("STAGE%dE_TRAIN=%d/%d STAGE%dE_VAL=%d/%d"
+          % (stage, tr.passed, tr.total, stage, va.passed, va.total))
     return 0
 
 
@@ -233,14 +286,23 @@ def run_stage2e(episodes: int, args) -> int:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="evolution pipeline runner")
-    p.add_argument("--stage", choices=("baseline", "2", "2e", "all"),
+    p.add_argument("--stage", choices=("baseline", "2", "3", "2e", "3e", "all"),
                    default="all")
-    p.add_argument("--episodes", type=int, default=200)
+    p.add_argument("--episodes", type=int, default=600)
     p.add_argument("--seed", type=int, default=SEED)
     p.add_argument("--alpha", type=float, default=0.5)
     p.add_argument("--gamma", type=float, default=0.95)
     p.add_argument("--epsilon-start", dest="epsilon_start", type=float, default=0.5)
     p.add_argument("--epsilon-end", dest="epsilon_end", type=float, default=0.02)
+    p.add_argument("--pref-lr", dest="pref_lr", type=float, default=0.1)
+    p.add_argument("--beta", type=float, default=1.0)
+    p.add_argument("--pref-sigma", dest="pref_sigma", type=float, default=0.5)
+    p.add_argument("--pref-mode", dest="pref_mode", choices=("td", "reinforce"),
+                   default="reinforce")
+    p.add_argument("--pref-ctx", dest="pref_ctx", action="store_true",
+                   default=False)
+    p.add_argument("--pref-baseline", dest="pref_baseline", type=float,
+                   default=0.1)
     args = p.parse_args(argv)
 
     rc = 0
@@ -248,8 +310,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         rc |= run_baseline(args.episodes, args.seed)
     if args.stage in ("2", "all"):
         rc |= run_stage2(args.episodes, args)
+    if args.stage in ("3", "all"):
+        rc |= run_stage3(args.episodes, args)
     if args.stage in ("2e", "all"):
-        rc |= run_stage2e(args.episodes, args)
+        rc |= run_stage_ext(2, args.episodes, args)
+    if args.stage in ("3e", "all"):
+        rc |= run_stage_ext(3, args.episodes, args)
     return rc
 
 

@@ -137,3 +137,53 @@ Command (core U2 set and the extended complex-scenario set):
 
 Measured convergence, final success and validation are in
 `/opt/workspace/tmp/automath/evolution/unit-B/EVIDENCE.md` (Stage 2 section).
+
+---
+
+## Stage 3 - remove the artificial steps: stochastic step-type valuation
+
+### 6. Design
+
+The reward-node scaffolding is deleted. The agent now carries a RANDOM
+per-action-type preference, a priori, and that distribution is shaped by the
+REAL reward signal observed during its own runs:
+
+* `pref[a]` is drawn from `N(0, sigma)` per action type at construction (seeded).
+* Action choice is greedy/epsilon-greedy over `q(s,a) + beta * pref[a]`; the
+  preference is ALSO the fallback policy for a `(goal, state)` with no Q entry,
+  so the step-type valuation generalises across states the tabular Q never saw.
+* After each episode `update_pref` shapes the preference from the real reward
+  only (never from a guidance node):
+  - `td`: bump each step type by its reward prediction error
+    `r + gamma*max Q(s') - Q(s,a)`;
+  - `reinforce`: bump it by the discounted return-to-go minus a PER-STEP-TYPE
+    running baseline (so no global sign saturates).
+* Reward is the ordinary environment reward: `+1.0` at the goal, `-0.01` per
+  step. No reward node is ever constructed on this path.
+
+Command:
+
+```sh
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3  --episodes 60
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3  --episodes 600
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 3e --episodes 600
+```
+
+Headline measured outcomes (raw output in the evidence file):
+
+| run | training | validation |
+| --- | -------- | ---------- |
+| Stage 2 (guidance), 60 ep | 10/10 | 33/33 |
+| Stage 3 (valuation), 60 ep, seed 20261009 | 6/10 | 18/33 |
+| Stage 3, 600 ep, seed 20261009 | 8/10 | 25/33 |
+| Stage 3, 600 ep, 6-seed range | 5-8/10 | 14-25/33 (mean 21.5) |
+| supervised planner | 10/10 | 33/33 |
+| pure-reward control, 60 ep | - | 14/33 |
+| pure-reward control, 600 ep | - | 19/33 |
+
+Honest reading: the stochastic step-type valuation DOES converge on the core
+U2 set (a rising success/reward curve that stabilises), and at the longer
+budget it exceeds the pure-reward control on average, but it is seed-sensitive
+and does NOT reach the supervisor or Stage 2. On the long-horizon extended
+complex-scenario suite (21 actions, plans up to 17 steps) it does NOT converge
+at this budget (12-13/114 validation), which is reported as a negative result.

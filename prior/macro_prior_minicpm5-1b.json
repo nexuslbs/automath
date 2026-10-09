@@ -1,0 +1,187 @@
+{
+  "generated_by": "scripts/build_macro_prior.py",
+  "model": "minicpm5-1b",
+  "base_url": "http://127.0.0.1:8080/v1",
+  "temperature": 0.0,
+  "max_tokens": 256,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "response_format": {
+    "type": "json_object"
+  },
+  "max_calls": 12,
+  "calls_used": 4,
+  "accepted_count": 3,
+  "calls": [
+    {
+      "call": 1,
+      "family": "result",
+      "case": "binary_int",
+      "candidate": 1,
+      "ok": true,
+      "latency_s": 19.425,
+      "prompt_tokens": 767,
+      "completion_tokens": 145,
+      "error": null,
+      "raw_response": "{\"name\": \"DefineScratchFromFunctionWithIntArg\", \"steps\": [{\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:IntBoolean\", \"from_int:FullStateArgIndex\", \"from_int:NodeMainIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:FullStateArgIndex\", \"from_int:NodeMainIndex\", \"from_int:StateScratchIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:NodeMainIndex\", \"from_int:StateScratchIndex\", \"from_int:CurrentStateArgsOuterGroupIndex\"]}]}",
+      "accepted": true,
+      "name": "DefineScratchFromFunctionWithIntArg",
+      "reason": "accepted"
+    },
+    {
+      "call": 2,
+      "family": "result",
+      "case": "binary_int",
+      "candidate": 2,
+      "ok": true,
+      "latency_s": 18.581,
+      "prompt_tokens": 767,
+      "completion_tokens": 140,
+      "error": null,
+      "raw_response": "{\"name\": \"DefineScratchFromFunctionWithIntArg\", \"steps\": [{\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:IntBoolean\", \"from_int:FullStateArgIndex\", \"from_int:NodeMainIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:FullStateArgIndex\", \"from_int:NodeMainIndex\", \"from_int:NodeMainIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:NodeMainIndex\", \"from_int:NodeMainIndex\", \"from_int:NodeMainIndex\"]}]}",
+      "accepted": true,
+      "name": "DefineScratchFromFunctionWithIntArg_2",
+      "reason": "accepted"
+    },
+    {
+      "call": 3,
+      "family": "scratch",
+      "case": "indices",
+      "candidate": 1,
+      "ok": true,
+      "latency_s": 28.868,
+      "prompt_tokens": 767,
+      "completion_tokens": 256,
+      "error": null,
+      "raw_response": "{\"name\": \"DefineScratchFromFunctionWithIntArg\", \"steps\": [{\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:IntBoolean\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:FullStateIntIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:NodeMainIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:FullStateMainIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:ScratchNodeIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:FarParentScope\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:RunInfoScopeDataIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:CurrentStateArgsOuterGroupIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\": [\"from_int:CurrentStateDefinitionIndex\"]}, {\"action\": \"DefineScratchFromFunctionWithIntArg\", \"args\":",
+      "accepted": false,
+      "name": null,
+      "reason": "JSON decode error: Expecting ',' delimiter: line 1 column 890 (char 889)"
+    },
+    {
+      "call": 4,
+      "family": "scratch",
+      "case": "indices",
+      "candidate": 2,
+      "ok": true,
+      "latency_s": 8.893,
+      "prompt_tokens": 767,
+      "completion_tokens": 44,
+      "error": null,
+      "raw_response": "{\"name\": \"CreateArgsGroup\", \"steps\": [{\"action\": \"CreateArgsGroup\", \"args\": [\"from_int:Param\", \"from_int:Var\", \"from_int:IntBoolean\"]}]}",
+      "accepted": true,
+      "name": "CreateArgsGroup",
+      "reason": "accepted"
+    }
+  ],
+  "validation": [
+    {
+      "call": 1,
+      "family": "result",
+      "name": "DefineScratchFromFunctionWithIntArg",
+      "accepted": true,
+      "reason": "accepted"
+    },
+    {
+      "call": 2,
+      "family": "result",
+      "name": "DefineScratchFromFunctionWithIntArg_2",
+      "accepted": true,
+      "reason": "accepted"
+    },
+    {
+      "call": 3,
+      "family": "scratch",
+      "name": null,
+      "accepted": false,
+      "reason": "JSON decode error: Expecting ',' delimiter: line 1 column 890 (char 889)"
+    },
+    {
+      "call": 4,
+      "family": "scratch",
+      "name": "CreateArgsGroup",
+      "accepted": true,
+      "reason": "accepted"
+    }
+  ],
+  "macros": [
+    {
+      "name": "DefineScratchFromFunctionWithIntArg",
+      "description": "LLM proposed candidate for family result",
+      "family": "result",
+      "steps": [
+        {
+          "action": "DefineScratchFromFunctionWithIntArg",
+          "args": [
+            "from_int:IntBoolean",
+            "from_int:FullStateArgIndex",
+            "from_int:NodeMainIndex"
+          ]
+        },
+        {
+          "action": "DefineScratchFromFunctionWithIntArg",
+          "args": [
+            "from_int:FullStateArgIndex",
+            "from_int:NodeMainIndex",
+            "from_int:StateScratchIndex"
+          ]
+        },
+        {
+          "action": "DefineScratchFromFunctionWithIntArg",
+          "args": [
+            "from_int:NodeMainIndex",
+            "from_int:StateScratchIndex",
+            "from_int:CurrentStateArgsOuterGroupIndex"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DefineScratchFromFunctionWithIntArg_2",
+      "description": "LLM proposed candidate for family result",
+      "family": "result",
+      "steps": [
+        {
+          "action": "DefineScratchFromFunctionWithIntArg",
+          "args": [
+            "from_int:IntBoolean",
+            "from_int:FullStateArgIndex",
+            "from_int:NodeMainIndex"
+          ]
+        },
+        {
+          "action": "DefineScratchFromFunctionWithIntArg",
+          "args": [
+            "from_int:FullStateArgIndex",
+            "from_int:NodeMainIndex",
+            "from_int:NodeMainIndex"
+          ]
+        },
+        {
+          "action": "DefineScratchFromFunctionWithIntArg",
+          "args": [
+            "from_int:NodeMainIndex",
+            "from_int:NodeMainIndex",
+            "from_int:NodeMainIndex"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CreateArgsGroup",
+      "description": "LLM proposed candidate for family scratch",
+      "family": "scratch",
+      "steps": [
+        {
+          "action": "CreateArgsGroup",
+          "args": [
+            "from_int:Param",
+            "from_int:Var",
+            "from_int:IntBoolean"
+          ]
+        }
+      ]
+    }
+  ]
+}

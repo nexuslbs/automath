@@ -92,8 +92,8 @@ def _run_main_test(
     fn_additional_info_agent: typing.Callable[[T], str] | None = None,
 ):
     def fn_additional_info(final_states: list[full_state.FullState]):
-        amount = len(final_states)
-        action_amount = sum([fs.history_amount() for fs in final_states])
+        amount = test_utils.result_amount(final_states)
+        action_amount = test_utils.result_action_amount(final_states)
         return f"Completed tests: {amount} ({action_amount} actions)"
     full_states = test_utils.run_module_test(fn, fn_additional_info)
     test_utils.run_test(
@@ -126,7 +126,7 @@ def run_with_agent(
     fn_run_agent: typing.Callable[[list[full_state.FullState]], T],
     fn_additional_info_agent: typing.Callable[[T], str] | None = None,
 ) -> list[full_state.FullState]:
-    final_states: list[full_state.FullState] = []
+    final_states = test_utils.ModuleResults()
 
     def run(
         fn: typing.Callable[[], list[full_state.FullState]],
@@ -138,20 +138,31 @@ def run_with_agent(
         )
 
 
-    final_states += run(basic_test.test)
+    final_states.fold(run(basic_test.test))
+    test_utils.release_caches()
 
-    final_states += run(boolean_test.test)
-    final_states += run(arithmetic_test.test)
-    final_states += run(indices_test.test)
+    final_states.fold(run(boolean_test.test))
+    test_utils.release_caches()
+    final_states.fold(run(arithmetic_test.test))
+    test_utils.release_caches()
+    final_states.fold(run(indices_test.test))
+    test_utils.release_caches()
 
-    final_states += run(action_00_action_meta.test)
-    final_states += run(lambda: action_01_state_meta.test(fast))
-    final_states += run(action_02_manage_scratch.test)
-    final_states += run(action_03_define_scratch.test)
-    final_states += run(action_04_update_scratch.test)
-    final_states += run(action_05_manage_args_group.test)
+    final_states.fold(run(action_00_action_meta.test))
+    test_utils.release_caches()
+    final_states.fold(run(lambda: action_01_state_meta.test(fast)))
+    test_utils.release_caches()
+    final_states.fold(run(action_02_manage_scratch.test))
+    test_utils.release_caches()
+    final_states.fold(run(action_03_define_scratch.test))
+    test_utils.release_caches()
+    final_states.fold(run(action_04_update_scratch.test))
+    test_utils.release_caches()
+    final_states.fold(run(action_05_manage_args_group.test))
+    test_utils.release_caches()
 
-    final_states += run(control_flow_test.test)
+    final_states.fold(run(control_flow_test.test))
+    test_utils.release_caches()
 
     return final_states
 

@@ -7525,57 +7525,50 @@ def test_float_comparisons() -> list[full_state.FullState]:
 
     return final_states
 
-def test_arithmetic() -> list[full_state.FullState]:
-    final_states: list[full_state.FullState] = []
+ARITHMETIC_CASES = (
+    ('>>test_binary_int_basic', test_binary_int_basic),
+    ('>>test_signed_int_basic', test_signed_int_basic),
+    ('>>test_int_to_binary', test_int_to_binary),
+    ('>>test_binary_to_int', test_binary_to_int),
+    ('>>test_int_add', test_int_add),
+    ('>>test_int_subtract', test_int_subtract),
+    ('>>test_int_multiply', test_int_multiply),
+    ('>>test_int_divide', test_int_divide),
+    ('>>test_int_divide_int', test_int_divide_int),
+    ('>>test_int_modulo', test_int_modulo),
+    ('>>test_int_comparisons', test_int_comparisons),
+    ('>>test_rational_basic', test_rational_basic),
+    ('>>test_rational_from_int', test_rational_from_int),
+    ('>>test_rational_to_int', test_rational_to_int),
+    ('>>test_rational_irreductible', test_rational_irreductible),
+    ('>>test_rational_add', test_rational_add),
+    ('>>test_rational_subtract', test_rational_subtract),
+    ('>>test_rational_multiply', test_rational_multiply),
+    ('>>test_rational_divide', test_rational_divide),
+    ('>>test_rational_comparisons', test_rational_comparisons),
+    ('>>test_float_basic', test_float_basic),
+    ('>>test_as_float', test_as_float),
+    ('>>test_float_add', test_float_add),
+    ('>>test_float_subtract', test_float_subtract),
+    ('>>test_float_multiply', test_float_multiply),
+    ('>>test_float_comparisons', test_float_comparisons),
+)
 
-    final_states += test_utils.run_info_test(
-        name='>>test_binary_int_basic',
-        fn=test_binary_int_basic)
-    final_states += test_utils.run_info_test(
-        name='>>test_signed_int_basic',
-        fn=test_signed_int_basic)
-    final_states += test_utils.run_info_test(name='>>test_int_to_binary', fn=test_int_to_binary)
-    final_states += test_utils.run_info_test(name='>>test_binary_to_int', fn=test_binary_to_int)
-    final_states += test_utils.run_info_test(name='>>test_int_add', fn=test_int_add)
-    final_states += test_utils.run_info_test(name='>>test_int_subtract', fn=test_int_subtract)
-    final_states += test_utils.run_info_test(name='>>test_int_multiply', fn=test_int_multiply)
-    final_states += test_utils.run_info_test(name='>>test_int_divide', fn=test_int_divide)
-    final_states += test_utils.run_info_test(name='>>test_int_divide_int', fn=test_int_divide_int)
-    final_states += test_utils.run_info_test(name='>>test_int_modulo', fn=test_int_modulo)
-    final_states += test_utils.run_info_test(name='>>test_int_comparisons', fn=test_int_comparisons)
+def test_arithmetic() -> test_utils.ModuleResults:
+    # FIX 5: the old body accumulated ``final_states += run_info_test(...)`` for
+    # every sub-case, keeping all returned FullState trees (and the node
+    # interning caches they feed) alive until the module returned; on a 3.8 GB
+    # no-swap box that peaked above 1.8 GB and the module never finished. Each
+    # sub-case is still produced by ``run_info_test`` (so all of its own asserts
+    # run and its counts print); only the aggregates are retained and the
+    # module-level node/sympy caches are released after every case.
+    result = test_utils.ModuleResults()
+    for name, fn in ARITHMETIC_CASES:
+        case_states = test_utils.run_info_test(name=name, fn=fn)
+        result.fold(case_states, keep=0)
+        del case_states
+        test_utils.release_caches()
+    return result
 
-    final_states += test_utils.run_info_test(name='>>test_rational_basic', fn=test_rational_basic)
-    final_states += test_utils.run_info_test(
-        name='>>test_rational_from_int',
-        fn=test_rational_from_int)
-    final_states += test_utils.run_info_test(name='>>test_rational_to_int', fn=test_rational_to_int)
-    final_states += test_utils.run_info_test(
-        name='>>test_rational_irreductible',
-        fn=test_rational_irreductible)
-    final_states += test_utils.run_info_test(name='>>test_rational_add', fn=test_rational_add)
-    final_states += test_utils.run_info_test(
-        name='>>test_rational_subtract',
-        fn=test_rational_subtract)
-    final_states += test_utils.run_info_test(
-        name='>>test_rational_multiply',
-        fn=test_rational_multiply)
-    final_states += test_utils.run_info_test(name='>>test_rational_divide', fn=test_rational_divide)
-    final_states += test_utils.run_info_test(
-        name='>>test_rational_comparisons',
-        fn=test_rational_comparisons)
-
-    final_states += test_utils.run_info_test(name='>>test_float_basic', fn=test_float_basic)
-    final_states += test_utils.run_info_test(name='>>test_as_float', fn=test_as_float)
-    final_states += test_utils.run_info_test(name='>>test_float_add', fn=test_float_add)
-    final_states += test_utils.run_info_test(name='>>test_float_subtract', fn=test_float_subtract)
-    final_states += test_utils.run_info_test(name='>>test_float_multiply', fn=test_float_multiply)
-    final_states += test_utils.run_info_test(
-        name='>>test_float_comparisons',
-        fn=test_float_comparisons)
-
-    return final_states
-
-def test() -> list[full_state.FullState]:
-    final_states: list[full_state.FullState] = []
-    final_states += test_arithmetic()
-    return final_states
+def test() -> test_utils.ModuleResults:
+    return test_arithmetic()

@@ -376,3 +376,25 @@ Resource state at the time of measurement: `free -m` total 3814 MB,
   `.../v1` 404 was not separately re-measured this unit.
 * The full suite was not completed on this box. It cannot be, before the
   harness retention in cause (iv) is fixed.
+
+## 6. FIX 5 applied: bounded harness retention (unit U2)
+
+The arithmetic harness no longer retains every sub-case's returned `FullState`
+tree. Each sub-case is still produced by `run_info_test` (so all of its own goal
+asserts run and its counts print), but its result is folded into counters
+(`ModuleResults.tests` / `.actions`) and only aggregates are kept
+(`test_suite/test_utils.py`: `ModuleResults`, `fold_results`, `release_caches`;
+`test_suite/arithmetic_test.py: test_arithmetic`; `test_suite/test_root.py:
+run_with_agent`; `tests.py`; `tests_fast.py`). After every sub-case the harness
+now releases the module-level retention that actually scaled with the number of
+cases: `BaseNode._instances` / `_cached_run` (`INode.clear_cache`),
+`IType._valid_cache`, the class-level `env.node_data` result cache, and the
+sympy global expression cache.
+
+ACCEPTED TRADE-OFF (decided by the orchestrator): because no arithmetic state
+trees are retained, the outer `test_root._final_verification` / agent replay
+sees an empty list for arithmetic. The per-case goal assertions are the
+verification that must keep running, and they do.
+
+Regression: `scripts/check_bounded_memory.sh` runs the module under
+`ulimit -v`, which the old accumulating code cannot satisfy.

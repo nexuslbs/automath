@@ -1,0 +1,753 @@
+{
+  "model": "/opt/automath/tmp/macro_smart.pt",
+  "train_cases": [
+    "binary_int",
+    "int_to_binary",
+    "boolean_lt"
+  ],
+  "train_macros": [
+    "result_true",
+    "result_false",
+    "result_write_true",
+    "result_check"
+  ],
+  "cases": [
+    {
+      "case": "binary_int",
+      "goal_type": "HaveResultScratch",
+      "goal_detail": "Eq[BinaryInt]",
+      "goal_symbol": "HaveResultScratch<336>{2}( Eq<126>{2}( BinaryInt<87>{1}(IntBoolean<155>[0]) BinaryInt<87>{1}(IntBoolean<155>[0]) ) TypeNode<226>[StateScratchIndex<200>] )",
+      "action_space_size": 4,
+      "start_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 0,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "end_state": {
+        "goal": true,
+        "cost": 1871096,
+        "history_amount": 3,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "macro_steps": 1,
+      "primitive_steps": 3,
+      "total_reward": 9960.319147,
+      "goal_reached": true,
+      "total_wall_s": 1.251696,
+      "max_action_wall_s": 0.41075,
+      "sub_second": false,
+      "max_history_size": 3,
+      "dropped_history": 0,
+      "macro_actions_taken": [
+        "result_true"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "macro": "result_true",
+          "reward": 9960.319147,
+          "ok": true,
+          "err": "none",
+          "goal": true,
+          "wall_s": 0.41075,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.335623,
+              "ok": true,
+              "cost": 91845900,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.34523,
+              "ok": true,
+              "cost": 92732550,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": 9999.0,
+              "ok": true,
+              "cost": 1871096,
+              "goal": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "signed_int",
+      "goal_type": "HaveResultScratch",
+      "goal_detail": "Eq[SignedInt]",
+      "goal_symbol": "HaveResultScratch<336>{2}( Eq<126>{2}( SignedInt<88>{2}( NegativeSign<151>{1}(IntBoolean<155>[0]) BinaryInt<87>{1}(IntBoolean<155>[0]) ) BinaryInt<87>{1}(IntBoolean<155>[0]) ) TypeNode<226>[StateScratchIndex<200>] )",
+      "action_space_size": 4,
+      "start_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 0,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "end_state": {
+        "goal": true,
+        "cost": 1905021,
+        "history_amount": 5,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "macro_steps": 2,
+      "primitive_steps": 5,
+      "total_reward": 9921.600221,
+      "goal_reached": true,
+      "total_wall_s": 0.894761,
+      "max_action_wall_s": 0.3716,
+      "sub_second": true,
+      "max_history_size": 5,
+      "dropped_history": 0,
+      "macro_actions_taken": [
+        "result_write_true",
+        "result_true"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "macro": "result_write_true",
+          "reward": -38.681675,
+          "ok": true,
+          "err": "none",
+          "goal": false,
+          "wall_s": 0.200684,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.336036,
+              "ok": true,
+              "cost": 91883850,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.345639,
+              "ok": true,
+              "cost": 92770500,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 2,
+          "macro": "result_true",
+          "reward": 9960.281896,
+          "ok": true,
+          "err": "none",
+          "goal": true,
+          "wall_s": 0.3716,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.354881,
+              "ok": true,
+              "cost": 93631850,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.363223,
+              "ok": true,
+              "cost": 94416150,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": 9999.0,
+              "ok": true,
+              "cost": 1905021,
+              "goal": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "int_to_binary",
+      "goal_type": "HaveResultScratch",
+      "goal_detail": "Eq[IntToBinary]",
+      "goal_symbol": "HaveResultScratch<336>{2}( Eq<126>{2}( IntToBinary<94>{1}(Integer<157>[0]) BinaryInt<87>{1}(IntBoolean<155>[0]) ) TypeNode<226>[StateScratchIndex<200>] )",
+      "action_space_size": 4,
+      "start_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 0,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "end_state": {
+        "goal": true,
+        "cost": 1904262,
+        "history_amount": 5,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "macro_steps": 2,
+      "primitive_steps": 5,
+      "total_reward": 9921.601851,
+      "goal_reached": true,
+      "total_wall_s": 0.813572,
+      "max_action_wall_s": 0.345029,
+      "sub_second": true,
+      "max_history_size": 5,
+      "dropped_history": 0,
+      "macro_actions_taken": [
+        "result_write_true",
+        "result_true"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "macro": "result_write_true",
+          "reward": -38.680853,
+          "ok": true,
+          "err": "none",
+          "goal": false,
+          "wall_s": 0.182829,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.335623,
+              "ok": true,
+              "cost": 91845900,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.34523,
+              "ok": true,
+              "cost": 92732550,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 2,
+          "macro": "result_true",
+          "reward": 9960.282704,
+          "ok": true,
+          "err": "none",
+          "goal": true,
+          "wall_s": 0.345029,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.354476,
+              "ok": true,
+              "cost": 93593900,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.362821,
+              "ok": true,
+              "cost": 94378200,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": 9999.0,
+              "ok": true,
+              "cost": 1904262,
+              "goal": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "boolean_lt",
+      "goal_type": "HaveResultScratch",
+      "goal_detail": "LessThan(Integer,Integer)",
+      "goal_symbol": "HaveResultScratch<336>{2}( LessThan<133>{2}( Integer<157>[1] Integer<157>[2] ) TypeNode<226>[StateScratchIndex<200>] )",
+      "action_space_size": 4,
+      "start_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 0,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "end_state": {
+        "goal": true,
+        "cost": 1903756,
+        "history_amount": 5,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "macro_steps": 2,
+      "primitive_steps": 5,
+      "total_reward": 9921.602938,
+      "goal_reached": true,
+      "total_wall_s": 0.83529,
+      "max_action_wall_s": 0.328236,
+      "sub_second": true,
+      "max_history_size": 5,
+      "dropped_history": 0,
+      "macro_actions_taken": [
+        "result_write_true",
+        "result_true"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "macro": "result_write_true",
+          "reward": -38.680304,
+          "ok": true,
+          "err": "none",
+          "goal": false,
+          "wall_s": 0.160533,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.335347,
+              "ok": true,
+              "cost": 91820600,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.344957,
+              "ok": true,
+              "cost": 92707250,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 2,
+          "macro": "result_true",
+          "reward": 9960.283242,
+          "ok": true,
+          "err": "none",
+          "goal": true,
+          "wall_s": 0.328236,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.354205,
+              "ok": true,
+              "cost": 93568600,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.362553,
+              "ok": true,
+              "cost": 94352900,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": 9999.0,
+              "ok": true,
+              "cost": 1903756,
+              "goal": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "indices",
+      "goal_type": "HaveScratch",
+      "goal_detail": "Void (index/args-group initial state)",
+      "goal_symbol": "HaveScratch<337>{2}( Void<57>{0} TypeNode<226>[StateScratchIndex<200>] )",
+      "action_space_size": 4,
+      "start_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 0,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "end_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 12,
+        "dropped_history": 0,
+        "last_action_error": [
+          "VerifyGoal",
+          "BooleanExceptionInfo",
+          "BooleanExceptionInfo<39>{1}(Eq<126>{2}( IntBoolean<155>[1] Void<57>{0} ))",
+          12
+        ]
+      },
+      "macro_steps": 4,
+      "primitive_steps": 12,
+      "total_reward": -560.379837,
+      "goal_reached": false,
+      "total_wall_s": 1.902683,
+      "max_action_wall_s": 0.305347,
+      "sub_second": false,
+      "max_history_size": 12,
+      "dropped_history": 0,
+      "macro_actions_taken": [
+        "result_true",
+        "result_true",
+        "result_false",
+        "result_true"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "macro": "result_true",
+          "reward": -139.945795,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.296781,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.465165,
+              "ok": true,
+              "cost": 104548800,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.480631,
+              "ok": true,
+              "cost": 106178350,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 2,
+          "macro": "result_true",
+          "reward": -140.04703,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.279023,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.515069,
+              "ok": true,
+              "cost": 109898600,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.531961,
+              "ok": true,
+              "cost": 111770800,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 3,
+          "macro": "result_false",
+          "reward": -140.14603,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.305347,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.564923,
+              "ok": true,
+              "cost": 115516350,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.581108,
+              "ok": true,
+              "cost": 117401200,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 4,
+          "macro": "result_true",
+          "reward": -140.240982,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.260871,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -19.612722,
+              "ok": true,
+              "cost": 121172050,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -19.62826,
+              "ok": true,
+              "cost": 123069550,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "control_flow",
+      "goal_type": "HaveScratch",
+      "goal_detail": "Void (If/Loop/function initial state)",
+      "goal_symbol": "HaveScratch<337>{2}( Void<57>{0} TypeNode<226>[StateScratchIndex<200>] )",
+      "action_space_size": 4,
+      "start_state": {
+        "goal": false,
+        "cost": 0,
+        "history_amount": 0,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "end_state": {
+        "goal": false,
+        "cost": 623671450,
+        "history_amount": 12,
+        "dropped_history": 0,
+        "last_action_error": null
+      },
+      "macro_steps": 5,
+      "primitive_steps": 12,
+      "total_reward": -491.990808,
+      "goal_reached": false,
+      "total_wall_s": 6.792219,
+      "max_action_wall_s": 1.153595,
+      "sub_second": false,
+      "max_history_size": 12,
+      "dropped_history": 0,
+      "macro_actions_taken": [
+        "result_false",
+        "result_false",
+        "result_true",
+        "result_write_true",
+        "result_true"
+      ],
+      "steps": [
+        {
+          "step": 1,
+          "macro": "result_false",
+          "reward": -142.44173,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.567878,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -20.688374,
+              "ok": true,
+              "cost": 355264900,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -20.753356,
+              "ok": true,
+              "cost": 379117050,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 2,
+          "macro": "result_false",
+          "reward": -142.804674,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.933847,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -20.87457,
+              "ok": true,
+              "cost": 427972500,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -20.930104,
+              "ok": true,
+              "cost": 452412300,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 3,
+          "macro": "result_true",
+          "reward": -143.113029,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
+          "goal": false,
+          "wall_s": 0.737466,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -21.032701,
+              "ok": true,
+              "cost": 501293050,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -21.080328,
+              "ok": true,
+              "cost": 525745500,
+              "goal": false
+            },
+            {
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 4,
+          "macro": "result_write_true",
+          "reward": -42.380241,
+          "ok": true,
+          "err": "none",
+          "goal": false,
+          "wall_s": 1.153595,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -21.169274,
+              "ok": true,
+              "cost": 574651550,
+              "goal": false
+            },
+            {
+              "primitive": 2,
+              "action": "DefineScratchFromInt",
+              "reward": -21.210967,
+              "ok": true,
+              "cost": 599116650,
+              "goal": false
+            }
+          ]
+        },
+        {
+          "step": 5,
+          "macro": "result_true",
+          "reward": -21.251134,
+          "ok": true,
+          "err": "none",
+          "goal": false,
+          "wall_s": 0.529722,
+          "primitives": [
+            {
+              "primitive": 1,
+              "action": "CreateScratch",
+              "reward": -21.251134,
+              "ok": true,
+              "cost": 623671450,
+              "goal": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

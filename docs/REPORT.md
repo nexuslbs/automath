@@ -479,3 +479,135 @@ latency and prompt/completion token counts. `scripts/run_case.py --macro-prior
 <file>` loads them via `env.macro_action.catalogue_from_json` and they REPLACE
 the built-in catalogue as the agent's selection space. The training loop itself
 uses NO LLM and NO network: it only selects over the frozen JSON catalogue.
+
+---
+
+## 9. U5: bounded training + held-out test over the macro-action space
+
+Base commit `cd40cb6` (fix 5). New committed entry point
+`scripts/train_macro_smart.py` (subcommands `train` and `eval`). It selects over
+the bounded macro-action catalogue of `env/macro_action.py` only; the torch DQN
+is `agent/smart_agent.py` (torch 2.14.1+cpu in `/opt/automath/venv`).
+
+### 9.1 Split (declared before training)
+
+| split | cases | family |
+| --- | --- | --- |
+| TRAIN | `binary_int`, `int_to_binary`, `boolean_lt` | `HaveResultScratch` (4-macro result catalogue) |
+| HELD-OUT | `signed_int`, `indices`, `control_flow` | `signed_int` same family; `indices`/`control_flow` `HaveScratch` |
+
+The agent action space is built from the FIRST train case only
+(`_train_catalogue(train_specs)`), so no held-out goal, catalogue or prior entry
+influences training. `signed_int` is a same-family unseen case (true
+generalisation). The DQN output dimension is FIXED at the training catalogue
+size (4), so the held-out `indices`/`control_flow` are evaluated by replaying
+the TRAIN catalogue (transfer test), not their own 3-macro catalogue; this is a
+stated limitation, not hidden.
+
+### 9.2 Bounded training (raw on /opt/automath)
+
+Command (detached, `PYTHONUNBUFFERED=1`, `-u`):
+
+```
+/opt/automath/venv/bin/python -u scripts/train_macro_smart.py train \
+  --train-cases binary_int,int_to_binary,boolean_lt \
+  --max-episodes 400 --max-wall-s 480 --max-steps 12 --seed 1 \
+  --checkpoint /opt/automath/tmp/macro_smart.pt \
+  --jsonl /opt/automath/logs/u5_train.jsonl \
+  --summary-json /opt/automath/logs/u5_train_summary.json
+```
+
+Result (raw): `episodes_run=42`, `wall_s=484.948602` (hard `--max-wall-s 480`
+fired: `WALL CAP reached after 42 episodes`), `updates=85`,
+`epsilon_final=0.89238204`, action space 4. Checkpoint
+`/opt/automath/tmp/macro_smart.pt`, size `3117079` bytes, sha256
+`9102ec88f9bc367bd24a616d00802780f5c783792a13a282c22369b6b5b576dc`.
+The committed per-episode curve is `results/u5_train_curve.jsonl` (42 rows with
+episode, case, macro_steps, primitive_steps, reward, goal, epsilon, loss,
+macros).
+
+Honest learning verdict: the DQN did NOT converge. `epsilon` is still ~0.892
+because `SmartAgent.train` only decays epsilon after a replay-buffer update, and
+42 episodes gave 85 updates. Two of 42 train episodes still failed (episode 7
+reward `-395.845371`, episode 40 `-395.817671`, both `goal=false`), and the
+train-case successes are mostly the 4-macro catalogue being small while epsilon
+stays at ~0.9 (near-random exploration): `result_true` is the correct macro for
+3 of the 3 train cases. The apparent `+9960` rewards are catalogue coverage, not
+a learned policy. The held-out `indices`/`control_flow` failures confirm it.
+
+### 9.3 Held-out test of the trained checkpoint
+
+The trained model was re-loaded (`agent.load`, `epsilon=0`) and evaluated on all
+six cases with `--max-steps 12`. Raw committed JSON:
+`results/heldout_macro_smart.json` (the run made under `unshare -n`; the run
+made with the network up is in the EVIDENCE log). Note: inference is NOT bit
+deterministic because `DQN.forward(x, training=True)` keeps dropout active
+during `select_action`, so the two runs pick slightly different macro
+sequences. The table below is the committed no-network JSON.
+
+| case | split | macro steps | prim steps | total reward | wall s | sub-second | goal | max history | dropped |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: |
+| binary_int | train | 1 | 3 | 9960.319147 | 1.251696 | no | PASS | 3 | 0 |
+| signed_int | held-out | 2 | 5 | 9921.600221 | 0.894761 | yes | PASS | 5 | 0 |
+| int_to_binary | train | 2 | 5 | 9921.601851 | 0.813572 | yes | PASS | 5 | 0 |
+| boolean_lt | train | 2 | 5 | 9921.602938 | 0.835290 | yes | PASS | 5 | 0 |
+| indices | held-out | 4 | 12 | -560.379837 | 1.902683 | no | FAIL | 12 | 0 |
+| control_flow | held-out | 5 | 12 | -491.990808 | 6.792219 | no | FAIL | 12 | 0 |
+
+Per-case start state was `goal=false cost=0 history=0 dropped=0`; `indices`
+ended with a structured `last_action_error` (`VerifyGoal`/`BooleanExceptionInfo`)
+rather than a traceback. Same-family `signed_int` generalises (2/2 PASS); the
+`HaveScratch` held-out cases FAIL.
+
+### 9.4 NO-NETWORK proof (option C bind)
+
+`unshare -n` is available (`/usr/bin/unshare`). Inside ONE namespace:
+
+```
+unshare -n -- bash -c '...'
+=== outbound curl ===
+curl: (6) Could not resolve host: example.com
+CURL_FAIL
+=== outbound python urllib ===
+URLLIB_FAIL URLError <urlopen error [Errno -3] Temporary failure in name resolution>
+=== bounded TRAINING under netns ===
+TRAIN_SUMMARY {..., "episodes_run": 6, "wall_s": 4.690755, ...}
+=== FULL EVALUATION under netns (main trained checkpoint) ===
+CASE binary_int ... goal_reached true
+CASE signed_int ... goal_reached true
+CASE int_to_binary ... goal_reached true
+CASE boolean_lt ... goal_reached true
+CASE indices ... goal_reached false
+CASE control_flow ... goal_reached false
+=== done inside netns, rc=0 ===
+```
+
+So a full training run and a full evaluation complete normally with no network,
+while an outbound request fails in the same namespace. Re-runnable command:
+`cd /opt/automath/repo && unshare -n -- bash -c '/opt/automath/venv/bin/python
+scripts/train_macro_smart.py train --max-episodes 6 --max-wall-s 90 --checkpoint
+/tmp/u5_noneth.pt && /opt/automath/venv/bin/python scripts/train_macro_smart.py
+eval --checkpoint /opt/automath/tmp/macro_smart.pt'`.
+
+### 9.5 Environment requirements
+
+* **4307 structured errors.** A wrong macro-action produces a typed error tuple
+  surfaced in the state, not a traceback. Raw probe
+  (`/opt/automath/logs/u5_4307_probe.txt`): macro
+  `[VerifyGoal(0, from_int:StateScratchIndex, 1)]` on `binary_int` gives
+  `last_action_error = ('VerifyGoal', 'BooleanExceptionInfo',
+  'BooleanExceptionInfo<39>{1}(IsEmpty<139>{1}(Optional<44>{0}))', 1)` and the
+  observation prints `last_error: action=VerifyGoal class=BooleanExceptionInfo
+  index=1 message=...`.
+* **4308 bounded state.** Documented bound
+  `config/settings.py:11 DEFAULT_MAX_HISTORY_STATE_SIZE = 128`. The U5 run
+  cannot exceed it with `--max-steps 12`: observed `max_history_size` 3 and 5
+  (result cases) and 12 (scratch cases), `dropped_history = 0` for every case.
+  The regression test `scripts/check_bounded_memory.sh` (U3) proves the bound
+  under a 1400000 kB virtual-memory cap.
+* **4309 timing.** Per-case wall times in the table: `signed_int`,
+  `int_to_binary`, `boolean_lt` are sub-second (0.81 to 0.89 s); `binary_int`
+  1.25 s is above 1 s only because it is the first case (torch warm-up plus the
+  first forward over the ~7000-node state); `indices` 1.90 s and
+  `control_flow` 6.79 s are above 1 s because their states grow to the 12-step
+  cap. No case is pathologically slow; the 6-case sweep is ~11.6 s total.

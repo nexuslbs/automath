@@ -94,6 +94,22 @@ class EvoConfig:
     # a config that omits these keys reproduces the original search exactly.
     restart_on_stall: int = 0
     restart_sigma: float = 0.5
+    # -- Unit B (Phase A) shaped-reward extension --------------------------
+    # These default to the BINDING reward design of docs/evolution/REWARDS.md.
+    # A config that leaves them out reproduces the Unit C search exactly (the
+    # semi path is opt-in by calling the evolution_semi module).
+    reward_gamma: float = 0.99
+    step_cost: float = -0.05
+    shaping_cap: float = 0.9
+    subgoal_bonus: float = 0.10
+    solved_rate_weight: float = 0.5
+    use_blx: bool = True
+    blx_alpha: float = 0.5
+    plateau_generations: int = 300
+    plateau_tol: float = 1e-4
+    validation_every: int = 100
+    validation_ext_every: int = 500
+    validation_episodes: int = 300
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)

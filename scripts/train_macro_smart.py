@@ -205,28 +205,22 @@ def cmd_train(args):
 
 
 # -------------------------------------------------------------------- eval --
-def cmd_eval(args):
-    from env.macro_action import MacroActionEnv
+def _run_cases(agent, specs, catalogue, max_steps, tag=''):
+    """Run one greedy episode per spec and return the per-case summaries.
 
-    registry = _build_registry()
-    names = [n for n in args.cases.split(',') if n]
-    specs = [_find(registry, n) for n in names]
-    # The action space must equal the training one; derive it from the train
-    # split only (never from the held-out case being evaluated).
-    train_specs = [_find(registry, n) for n in args.train_cases.split(',') if n]
-    catalogue = _train_catalogue(train_specs)
-    agent = _make_agent(len(catalogue), args.seed)
-    agent.load(args.checkpoint)
-    agent.epsilon = 0.0  # pure exploitation of the trained checkpoint
+    ``tag`` prefixes the printed CASE/start/end lines so the trained run and the
+    untrained control are distinguishable in one log.
+    """
+    from env.macro_action import MacroActionEnv
 
     results = []
     for spec in specs:
-        env = MacroActionEnv(spec['builder'](args.max_steps), catalogue=catalogue)
+        env = MacroActionEnv(spec['builder'](max_steps), catalogue=catalogue)
         start_fields = _state_fields(env)
         start_wall = time.perf_counter()
         steps = []
         total_primitives = 0
-        for i in range(1, args.max_steps + 1):
+        for i in range(1, max_steps + 1):
             action = agent.select_action(env.full_state)
             action_start = time.perf_counter()
             with contextlib.redirect_stdout(io.StringIO()):
@@ -271,10 +265,36 @@ def cmd_eval(args):
             'steps': steps,
         }
         results.append(summary)
-        print('CASE ' + json.dumps({k: v for k, v in summary.items()
-                                    if k != 'steps'}))
-        print(f'  start: {json.dumps(start_fields)}')
-        print(f'  end:   {json.dumps(end_fields)}')
+        print(tag + 'CASE ' + json.dumps({k: v for k, v in summary.items()
+                                          if k != 'steps'}))
+        print(f'  {tag.lower()}start: {json.dumps(start_fields)}')
+        print(f'  {tag.lower()}end:   {json.dumps(end_fields)}')
+    return results
+
+
+def cmd_eval(args):
+    registry = _build_registry()
+    names = [n for n in args.cases.split(',') if n]
+    specs = [_find(registry, n) for n in names]
+    # The action space must equal the training one; derive it from the train
+    # split only (never from the held-out case being evaluated).
+    train_specs = [_find(registry, n) for n in args.train_cases.split(',') if n]
+    catalogue = _train_catalogue(train_specs)
+    agent = _make_agent(len(catalogue), args.seed)
+    agent.load(args.checkpoint)
+    agent.epsilon = 0.0  # pure exploitation of the trained checkpoint
+
+    results = _run_cases(agent, specs, catalogue, args.max_steps)
+
+    # Untrained control (tester finding 8a): a fresh random-initialised agent
+    # built by the SAME constructor with the SAME seed and max-steps, so the
+    # trained-vs-untrained goal set is directly comparable in one results JSON.
+    import torch
+    torch.manual_seed(args.seed)
+    untrained = _make_agent(len(catalogue), args.seed)
+    untrained.epsilon = 0.0
+    untrained_results = _run_cases(untrained, specs, catalogue,
+                                   args.max_steps, tag='UNTRAINED_')
 
     if args.out:
         os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
@@ -283,12 +303,22 @@ def cmd_eval(args):
             'train_cases': [s['name'] for s in train_specs],
             'train_macros': [m.name for m in catalogue],
             'cases': results,
+            'untrained_baseline': {
+                'model': '<fresh random init, same constructor/seed/max-steps>',
+                'seed': args.seed,
+                'max_steps': args.max_steps,
+                'cases': untrained_results,
+            },
         }
         with open(args.out, 'w', encoding='utf-8') as handle:
             json.dump(payload, handle, indent=2)
     print('EVAL_SUMMARY ' + json.dumps([
         {k: v for k, v in r.items() if k not in ('steps', 'macro_actions_taken')}
         for r in results
+    ]))
+    print('UNTRAINED_EVAL_SUMMARY ' + json.dumps([
+        {k: v for k, v in r.items() if k not in ('steps', 'macro_actions_taken')}
+        for r in untrained_results
     ]))
     return 0
 

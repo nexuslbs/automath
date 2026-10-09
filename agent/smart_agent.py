@@ -523,7 +523,7 @@ class SmartAgent(BaseAgent):
                     torch.Tensor,
                     torch.Tensor,
                     torch.Tensor,
-                ] = self.policy_net(state_tensor)
+                ] = self.policy_net(state_tensor, training=False)
                 action_logits, arg1, arg2, arg3, _ = tensors
                 # Use joint Q-values instead of action_logits for action selection
                 action_idx = int(action_logits.argmax(dim=1).item()) + 1

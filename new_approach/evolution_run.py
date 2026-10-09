@@ -17,6 +17,8 @@ run the core comparison; `2e`/`3e` run the extended complex-scenario suite.
 from __future__ import annotations
 
 import argparse
+import os
+import random
 import statistics
 import sys
 import time
@@ -45,6 +47,23 @@ from .u2 import (
     curriculum as u2_curriculum,
     training_cases as u2_training_cases,
     validation_cases as u2_validation_cases,
+)
+from .evolution_bundle import (
+    Bundle,
+    make_demo_bundle,
+    render_trace,
+    run_bundle,
+    start_order,
+)
+from .evolution_population import (
+    EvoConfig,
+    Genome,
+    evolve_one_generation,
+    init_population,
+    load_checkpoint,
+    restore_population,
+    save_generation,
+    train_genome,
 )
 
 SEED = 20261009
@@ -281,15 +300,212 @@ def run_stage_ext(stage: int, episodes: int, args) -> int:
 
 
 # --------------------------------------------------------------------------
+# Unit C: bounded demo of the evolutionary loop
+# --------------------------------------------------------------------------
+
+def _print_generation_record(rec: dict, fitness_by_gid: dict, bundle) -> None:
+    print("-" * 72)
+    print("GENERATION %02d  best=%+.4f mean=%+.4f threshold=%+.4f"
+          % (rec["generation"], rec["best_fitness"], rec["mean_fitness"],
+             rec["threshold"]))
+    print("  reproduction pool: qualified=%s" % (rec["qualified"],))
+    print("  best state-choosers=%s" % (rec["choosers"],))
+    print("  best solvers      =%s" % (rec["solvers"],))
+    agent_fit = {a["gid"]: a["fitness"] for a in rec["agents"]}
+    print("  AGENT TABLE (population=%d, evaluated this generation):"
+          % len(rec["agents"]))
+    print("    %-16s %-9s %-18s %8s %8s %8s %6s %5s"
+          % ("gid", "origin", "parents", "fitness", "solver", "chooser",
+             "solved", "steps"))
+    for a in rec["agents"]:
+        print("    %-16s %-9s %-18s %+8.3f %8.3f %8.3f %6d %5d"
+              % (a["gid"], a["origin"], ",".join(a["parents"]) or "-",
+                 a["fitness"], a["solver_score"], a["chooser_score"],
+                 a["solved_feasible"], a["steps"]))
+    for a in rec["agents"]:
+        fitness_by_gid[a["gid"]] = a["fitness"]
+    print("  OFFSPRING CROSS TABLE (which instincts crossed; child fitness "
+          "is the child row above / next generation):")
+    print("    %-16s %-20s %8s %9s %9s %12s"
+          % ("child", "parents(A,B)", "prefA/B", "stateA/B", "eps/pat",
+             "child_fit"))
+    for c in rec["offspring"]:
+        d = c["cross_detail"]
+        pa, pb = (list(c["parents"]) + ["-", "-"])[:2]
+        print("    %-16s %-20s %4d/%-3d %4d/%-4d %5s/%-4s %+12.3f"
+              % (c["gid"], "%s,%s" % (pa, pb),
+                 d.get("pref_from_a", 0), d.get("pref_from_b", 0),
+                 d.get("state_from_a", 0), d.get("state_from_b", 0),
+                 d.get("epsilon_from", "?"), d.get("patience_from", "?"),
+                 agent_fit.get(c["gid"], float("nan"))))
+        print("        parent A=%s fitness=%s ; parent B=%s fitness=%s"
+              % (pa, ("%+.3f" % fitness_by_gid[pa])
+                 if pa in fitness_by_gid else "n/a",
+                 pb, ("%+.3f" % fitness_by_gid[pb])
+                 if pb in fitness_by_gid else "n/a"))
+
+
+def _print_full_evolution_table(history) -> None:
+    print("=" * 72)
+    print("FULL EVOLUTION TABLE (every agent, every generation; parents and "
+          "gene crosses shown)")
+    print("  %-4s %-16s %-9s %-20s %8s %8s %8s %6s %5s %-22s"
+          % ("gen", "gid", "origin", "parents", "fitness", "solver",
+             "chooser", "solved", "steps", "cross pA/pB sA/sB eps/pat"))
+    for rec in history:
+        for a in rec["agents"]:
+            d = a.get("cross_detail") or {}
+            cross = "-"
+            if d:
+                cross = "p%d/%d s%d/%d %s/%s" % (
+                    d.get("pref_from_a", 0), d.get("pref_from_b", 0),
+                    d.get("state_from_a", 0), d.get("state_from_b", 0),
+                    d.get("epsilon_from", "?"), d.get("patience_from", "?"))
+            print("  %-4d %-16s %-9s %-20s %+8.3f %8.3f %8.3f %6d %5d %-22s"
+                  % (rec["generation"], a["gid"], a["origin"],
+                     ",".join(a["parents"]) or "-", a["fitness"],
+                     a["solver_score"], a["chooser_score"],
+                     a["solved_feasible"], a["steps"], cross))
+
+
+def run_stage_c(args) -> int:
+    cfg = EvoConfig(
+        population=args.pop,
+        episodes=args.demo_episodes,
+        generations=args.gens,
+        total_budget=args.total_budget,
+        seed=args.seed,
+        elites=max(2, args.pop // 4),
+        top_k=max(2, args.pop // 4),
+        checkpoint_dir=args.ckpt_dir,
+        progress_dir=args.progress_dir,
+    )
+    bundle: Bundle = make_demo_bundle(cfg.total_budget)
+    hdr("UNIT C (bounded demo): population evolution + multi-state TOTAL "
+        "budget + impossible goals")
+    print("bundle=%s total_budget=%d states=%d feasible=%d impossible=%d "
+          "fingerprint=%s"
+          % (bundle.name, bundle.total_budget, len(bundle.states),
+             len(bundle.feasible()), len(bundle.impossible()),
+             bundle.fingerprint()[:16]))
+    for s in bundle.states:
+        note = ("IMPOSSIBLE: " + s.impossible_reason) if not s.feasible else ""
+        print("  state %s %-20s feasible=%-5s expected_len=%2d %s"
+              % (s.sid, s.name, s.feasible, s.expected_len, note))
+    print("config: population=%d episodes_per_agent=%d generations=%d "
+          "elites=%d top_k=%d threshold_frac=%.2f mutation_rate=%.2f "
+          "mutation_sigma=%.2f sigma_pref=%.2f sigma_state=%.2f"
+          % (cfg.population, cfg.episodes, cfg.generations, cfg.elites,
+             cfg.top_k, cfg.threshold_frac, cfg.mutation_rate,
+             cfg.mutation_sigma, cfg.sigma_pref, cfg.sigma_state))
+
+    rng = random.Random(cfg.seed)
+    population = init_population(cfg, bundle, rng)
+    print("initial random genome sample: pref[0:6]=%s state_pref=%s "
+          "eps=%.3f patience=%d"
+          % (["%+.2f" % v for v in population[0].pref[:6]],
+             ["%+.2f" % v for v in population[0].state_pref],
+             population[0].epsilon, population[0].switch_patience))
+
+    history = []
+    fitness_by_gid: dict = {}
+    best = population[0]
+    for gen in range(cfg.generations):
+        population, rec = evolve_one_generation(population, gen, bundle, cfg,
+                                                rng, cfg.seed)
+        _print_generation_record(rec, fitness_by_gid, bundle)
+        history.append(rec)
+        best = max(population, key=lambda g: g.fitness)
+        sys.stdout.flush()
+
+    _print_full_evolution_table(history)
+
+    print("=" * 72)
+    print("CHECKPOINTS under %s" % cfg.checkpoint_dir)
+    paths = save_generation(cfg, cfg.generations, population, history, bundle,
+                            best)
+    for name in sorted(os.listdir(cfg.checkpoint_dir)):
+        p = os.path.join(cfg.checkpoint_dir, name)
+        print("  %s %d bytes" % (p, os.path.getsize(p)))
+    print("save_generation returned: %s"
+          % ", ".join("%s=%d" % (os.path.basename(k), os.path.getsize(v))
+                      for k, v in paths.items()))
+
+    # -- multi-state impossible-goal raw trace --------------------------
+    print("=" * 72)
+    print("MULTI-STATE TOTAL-BUDGET TRACE (forced to start on the "
+          "IMPOSSIBLE state s4)")
+    best_agent = train_genome(best, bundle, cfg, cfg.seed + 777)
+    forced = Genome(pref=list(best.pref),
+                    state_pref=[0.0] * len(bundle.states),
+                    epsilon=0.02, switch_patience=best.switch_patience,
+                    gid="forced-impossible-first")
+    forced.state_pref[bundle.index("s4")] = 5.0
+    impossible_first = run_bundle(best_agent, bundle, forced.state_pref,
+                                  total_budget=cfg.total_budget,
+                                  training=False)
+    print("forced state instinct order: %s"
+          % [bundle.by_id(s).name for s in start_order(bundle,
+                                                       forced.state_pref)])
+    print(render_trace(impossible_first, bundle))
+    print("PER-STATE RESULT (impossible-first run):")
+    for row in impossible_first.per_state_rows():
+        print("  %s" % (row,))
+
+    print("-" * 72)
+    print("BEST GENOME instinct order: %s"
+          % [bundle.by_id(s).name for s in start_order(bundle,
+                                                       best.state_pref)])
+    print("BEST GENOME greedy trace:")
+    print(render_trace(best._result, bundle))
+    print("PER-STATE RESULT (best genome):")
+    for row in best._result.per_state_rows():
+        print("  %s" % (row,))
+
+    # -- warm start proof ----------------------------------------------
+    print("=" * 72)
+    ck = load_checkpoint(os.path.join(cfg.checkpoint_dir, "checkpoint.json"))
+    loaded_gen = ck["generation"]
+    warm_pop = restore_population(ck)
+    print("WARM_START loaded=%s generation=%d population=%d best_fitness=%+.4f"
+          % (os.path.join(cfg.checkpoint_dir, "checkpoint.json"), loaded_gen,
+             len(warm_pop), ck["best_fitness"]))
+    rng2 = random.Random(cfg.seed + loaded_gen)
+    warm_pop2, rec2 = evolve_one_generation(warm_pop, loaded_gen, bundle, cfg,
+                                            rng2, cfg.seed)
+    print("WARM_START continued -> generation=%d best=%+.4f (loaded "
+          "generation %d + 1)"
+          % (rec2["generation"], rec2["best_fitness"], loaded_gen))
+    print("WARM_START new pool: qualified=%s choosers=%s solvers=%s"
+          % (rec2["qualified"], rec2["choosers"], rec2["solvers"]))
+    print("UNITC_CONFIG_POP=%d EPISODES=%d GENERATIONS=%d TOTAL_BUDGET=%d"
+          % (cfg.population, cfg.episodes, cfg.generations, cfg.total_budget))
+    return 0
+
+
+# --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="evolution pipeline runner")
-    p.add_argument("--stage", choices=("baseline", "2", "3", "2e", "3e", "all"),
+    p.add_argument("--stage",
+                   choices=("baseline", "2", "3", "2e", "3e", "c", "all"),
                    default="all")
     p.add_argument("--episodes", type=int, default=2000)
     p.add_argument("--seed", type=int, default=SEED)
+    p.add_argument("--pop", type=int, default=8,
+                   help="Unit C demo population size")
+    p.add_argument("--gens", type=int, default=6,
+                   help="Unit C demo number of generations")
+    p.add_argument("--total-budget", dest="total_budget", type=int, default=60,
+                   help="Unit C demo total step budget across ALL states")
+    p.add_argument("--demo-episodes", dest="demo_episodes", type=int,
+                   default=15, help="Unit C training episodes per agent")
+    p.add_argument("--ckpt-dir", dest="ckpt_dir",
+                   default="/opt/automath/tmp/evolution/checkpoints_demo")
+    p.add_argument("--progress-dir", dest="progress_dir",
+                   default="/opt/automath/tmp/evolution/progress_demo")
     p.add_argument("--alpha", type=float, default=0.5)
     p.add_argument("--gamma", type=float, default=0.95)
     p.add_argument("--epsilon-start", dest="epsilon_start", type=float, default=0.5)
@@ -316,6 +532,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         rc |= run_stage_ext(2, args.episodes, args)
     if args.stage in ("3e", "all"):
         rc |= run_stage_ext(3, args.episodes, args)
+    if args.stage == "c":
+        rc |= run_stage_c(args)
     return rc
 
 

@@ -193,3 +193,121 @@ suite (21 actions, plans up to 17 steps) it does NOT converge at this budget
 (1/11 training, 16/114 validation), which is reported as a negative result.
 Using `reinforce` instead of `td`, or context-conditioned preferences, did not
 improve these numbers.
+
+---
+
+# Unit C - the evolutionary loop, multi-state total budget, persistence
+
+Unit C turns the Stage 1-3 single-agent machinery into a POPULATION that evolves
+over generations, evaluated on a BUNDLE of states under ONE TOTAL step budget,
+with impossible goals in the mix and a persisted, warm-startable checkpoint.
+
+Modules: `new_approach/evolution_bundle.py` (bundle + total-budget controller),
+`new_approach/evolution_population.py` (genome, selection, reproduction,
+persistence), `new_approach/evolution_loop.py` (detached long run),
+`new_approach/evolution_c_tests.py` (12 deterministic checks). Stage 3's
+`EvolutionAgent` is unchanged except for an optional `pref_init` seed and the
+`switch_patience` instinct (both default off, so the Unit B results reproduce).
+
+## 1. Genome (the heritable BASIC INSTINCT)
+
+| gene | meaning |
+| ---- | ------- |
+| `pref[21]` | per-step-type preference over the extended action alphabet (the Stage 3 instinct), seeded into the agent's `pref` via `pref_init` |
+| `state_pref[S]` | per-state preference over the bundle's `S` states: which state to start first and which to prefer on a switch (the BEST STATE-CHOOSER instinct) |
+| `epsilon` | exploration temperament (initial epsilon, clipped to `[epsilon_min, epsilon_max]`) |
+| `switch_patience` | stagnation window (steps without reward progress) before a mid-state switch, `[2, 20]` |
+
+## 2. Multi-state TOTAL-budget mode (`evolution_bundle.py`)
+
+A `Bundle` is a tuple of `BundleState`s plus ONE `total_budget` shared by all of
+them. Feasibility is DERIVED, not declared: a target is feasible iff every
+`Group` in it has a build action in `SEM_BY_KEY` (`target_feasible`). The demo
+bundle has 5 feasible states (optimal words of 2/3/5/7/11 actions) and 2
+structurally impossible ones:
+
+| state | target | reason impossible |
+| ----- | ------ | ----------------- |
+| `s4` | `Group(nat(99),(1,0))` | no build action has tag=99 arity=2 |
+| `s6` | `Group(nat(10),(1,0,1,0,1))` | no build action has tag=10 arity=5 |
+
+`run_bundle` is the controller:
+
+* start state = highest `state_pref`, then the rest of the instinct order;
+* ONE shared counter `remaining`; every step decrements it and is charged
+  `-0.01`; solving a feasible state adds `+1.0` (the solving step earns the goal
+  reward INSTEAD of the step penalty). The sum of per-state rewards always
+  equals the run total;
+* mid-state switch triggers (both carry an explicit reason):
+  - **stagnation**: `switch_patience` steps without structural-progress
+    improvement (`size(top)/size(target)`);
+  - **budget-ratio**: the state has spent `BUDGET_RATIO_TRIGGER = 0.5` of the
+    budget it had when entered.
+* a per-sweep rule: within one sweep every unsolved state is tried once (ranked
+  by `state_pref`) before an abandoned state may be revisited, so an impossible
+  state cannot immediately eat the budget again.
+
+Fitness = total reward of the greedy evaluation. Two extra scores are tracked
+for selection: `solver_score` = sum over feasible states of `1.0` if solved else
+the best partial fraction; `chooser_score` = `solved_feasible - impossible_steps
+/ total_steps`.
+
+## 3. Population evolution and the selection operator
+
+Generation step (`evolve_one_generation`): every genome is instantiated as an
+`EvolutionAgent` seeded with its `pref` and `switch_patience`, trained for
+`episodes` full-bundle episodes under the shared budget, then evaluated greedily
+(stable per-genome seed, so an elite keeps its measured fitness and best fitness
+is monotone under elitism). Reproduction:
+
+1. **ELITISM** - the top `elites` genomes by fitness survive unchanged.
+2. **THRESHOLD** - every agent with `reward >= threshold_frac * best_reward`
+   joins the reproduction pool.
+3. **BEST CHOOSERS + BEST SOLVERS** - the top `top_k` by `chooser_score` and the
+   top `top_k` by `solver_score` are added to the pool, so the two instincts can
+   be mixed.
+4. **CROSSOVER + MUTATION** - a chooser and a solver are paired; each child
+   inherits each gene from A or B (uniform per-gene) and is then perturbed
+   (`mutation_rate`, `mutation_sigma`, clipped). The cross detail
+   (`pref_from_a/b`, `state_from_a/b`, `epsilon_from`, `patience_from`) is
+   recorded for every child.
+5. **REPLACEMENT** - elites + offspring fill the fixed population size.
+
+## 4. Persistence and warm start
+
+`save_generation` writes three JSON files (atomic tmp+rename) under the
+checkpoint dir: `checkpoint.json` (population + generation + best), `history.json`
+(all generation records) and `state_results.json` (the best agent's per-state
+table and trace). `load_checkpoint` + `restore_population` reproduce the genes
+exactly; `evolution_loop --resume` and the warm-start phase of `--stage c` load
+generation `G` and continue at `G+1`.
+
+## 5. Long run and convergence target
+
+`evolution_loop --config <cfg>` evolves continuously. It ignores `SIGHUP`,
+exits cleanly on SIGTERM/SIGINT after a final checkpoint, writes a timestamped
+progress snapshot every `heartbeat_secs` AND every `heartbeat_generations` to
+`progress/`, and prints one `PROGRESS` line (the detached shell appends stdout to
+`longrun.log`). `config/evolution_longrun.json` is the long-run config. Stop
+conditions: a generation cap, a wall-clock cap, or a signal.
+
+The convergence TARGET is an optimal agent that solves every feasible state
+inside the shared budget, skips the impossible ones fast and uses minimal steps.
+The bounded demo measures how far the loop gets and reports it honestly: the
+population MEAN fitness rises (e.g. `+0.347 -> +0.936` over 8 generations at
+pop=12/episodes=60/budget=100) and elitism holds the best at `+1.020`
+(2 of 5 feasible states); it does NOT reach 5/5 at this agent/budget, which is
+consistent with the Unit B Stage 3 result that the reward-only tabular agent
+does not solve the long-horizon scenarios. The long run keeps evolving.
+
+## 6. Unit C commands
+
+```sh
+/opt/automath/venv/bin/python -m new_approach.evolution_c_tests        # 12 checks
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage c \
+    --pop 12 --gens 8 --demo-episodes 60 --total-budget 100 \
+    --ckpt-dir /opt/automath/tmp/evolution/checkpoints_demo
+/opt/automath/venv/bin/python -m new_approach.evolution_loop \
+    --config config/evolution_longrun.json
+```
+

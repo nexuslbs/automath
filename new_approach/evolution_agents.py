@@ -160,6 +160,8 @@ class EvolutionAgent:
         pref_clip: float = 5.0,
         pref_ctx: bool = False,
         pref_baseline: float = 0.1,
+        pref_init: Optional[Dict[str, float]] = None,
+        switch_patience: int = 6,
     ) -> None:
         self.action_order = tuple(action_order)
         self.arity = dict(arity) if arity is not None else CORE_ARITY
@@ -179,18 +181,27 @@ class EvolutionAgent:
         self.pref_clip = pref_clip
         self.pref_ctx = pref_ctx
         self.pref_baseline = pref_baseline
+        # Unit C: the switching trigger instinct carried by the genome.
+        self.switch_patience = switch_patience
         self.q: Dict[str, Dict[str, Dict[str, float]]] = {}
         self.rng = random.Random(seed)
-        # The RANDOM per-step-type preference (a priori valuation), keyed by
+        # The per-step-type preference (a priori valuation), keyed by
         # "action@context"; contexts collapse to "" when pref_ctx is off.
+        # ``pref_init`` lets a genome SEED the instinct (Unit C); without it
+        # the preference is drawn from N(0, sigma) exactly as in Stage 3.
         self.pref: Dict[str, float] = {}
         self._pref_base: Dict[str, float] = {}
         if use_pref:
             contexts = CONTEXTS if pref_ctx else ("",)
             for action in self.action_order:
                 for ctx in contexts:
-                    self.pref["%s@%s" % (action, ctx)] = self.rng.gauss(
-                        0.0, pref_sigma)
+                    pkey = "%s@%s" % (action, ctx)
+                    if pref_init is not None and pkey in pref_init:
+                        self.pref[pkey] = float(pref_init[pkey])
+                    elif pref_init is not None and action in pref_init:
+                        self.pref[pkey] = float(pref_init[action])
+                    else:
+                        self.pref[pkey] = self.rng.gauss(0.0, pref_sigma)
 
     # -- action/context helpers -----------------------------------------
     def valid(self, stack: Sequence[Node]) -> Tuple[str, ...]:

@@ -104,3 +104,36 @@ cd /opt/automath/repo
 
 The extended runner imports the prior `CHECKS` unchanged, so a regression in
 the original semantics fails the extended run too.
+
+---
+
+## Stage 2 - artificial reward/guidance scaffolding
+
+### 5. Design
+
+Training-only scaffolding, no planner action-word supervision
+(`use_demo=False`):
+
+* After every step the environment emits a REWARD NODE into the observation:
+  `Group(nat(20), (One(),))` for GOOD, `Group(nat(20), (Zero(),))` for BAD.
+  `read_reward` turns it into `+0.5` / `-0.5`.
+* A state on the unique optimal trajectory has exactly one intended step; that
+  action earns GOOD, every other action earns BAD. A state off the trajectory
+  has no intended step, so every action there earns BAD. Terminal success adds
+  `+1.0`.
+* The agent (`GuidedQAgent`) is target-conditioned tabular Q-learning; its ONLY
+  learning signal is the scalar read from the reward node plus the goal reward.
+  No action word from the planner is ever fed to the learner.
+* Evaluation removes the reward node entirely and acts greedily on the learned
+  Q table (`evaluate`), so the learned policy is tested without scaffolding.
+
+Command (core U2 set and the extended complex-scenario set):
+
+```sh
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage baseline
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 2  --episodes 600
+/opt/automath/venv/bin/python -m new_approach.evolution_run --stage 2e --episodes 200
+```
+
+Measured convergence, final success and validation are in
+`/opt/workspace/tmp/automath/evolution/unit-B/EVIDENCE.md` (Stage 2 section).

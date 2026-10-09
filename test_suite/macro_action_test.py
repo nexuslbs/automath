@@ -98,7 +98,8 @@ def test_macro_reaches_goal_deterministically():
     _, macro_reward, _, _ = macro_env.step(1)
     per_primitive = [p['reward'] for p in macro_env.last_primitive_trace]
     assert len(per_primitive) == 3
-    assert abs(macro_reward - sum(per_primitive)) < 1e-9
+    # The trace stores rewards rounded to 6 decimals, so compare at that scale.
+    assert abs(round(macro_reward, 6) - sum(per_primitive)) < 1e-6
 
 
 def test_json_injection_seam_round_trip():

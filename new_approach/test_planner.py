@@ -142,10 +142,11 @@ def test_budget_max_search_nodes_and_no_infinite_loop() -> None:
     t0 = time.perf_counter()
     assert planner.plan(target, (junk,)) is None
     # Search budget 0 refuses a stack that genuinely needs SEARCH (not a
-    # canonical prefix): [One, One] needs MakeChange then MakeMul.
+    # canonical prefix). [One, One] is a prefix, so use an all-subtree but
+    # non-prefix, unsolvable state: [One, One, One].
     assert planner.plan(target, (One(), One())) == ["MakeChange", "MakeMul"]
     p0 = _planner("evo", max_search_nodes=0)
-    assert p0.plan(target, (One(), One())) is None
+    assert p0.plan(target, (One(), One(), One())) is None
     assert time.perf_counter() - t0 < 5.0
 
 

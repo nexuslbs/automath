@@ -6,6 +6,7 @@ from env.goal_env import GoalEnv
 from env.node_types import HaveScratch
 from env.action import RawAction, BaseAction, IBasicAction
 from env.base_agent import BaseAgent
+from env.macro_action import MacroActionEnv
 from env import core
 from test_suite import test_root
 from utils.env_logger import env_logger
@@ -86,7 +87,11 @@ def train_agent(
                     raw_actions.append(raw_action)
 
                 static_result = None
-                if raw_actions:
+                # Static imitation replays history RawActions, which are
+                # primitive indices; it cannot be replayed through the
+                # macro-action space, so it is skipped for a macro-space agent.
+                if raw_actions and not getattr(
+                        agent, 'action_space_is_macro', False):
                     static_result = run_agent_case(
                         current_amount=amount,
                         current_fs=current_fs,
@@ -145,6 +150,11 @@ def train_agent(
                     max_steps=max_steps_forward + current_fs.history_amount(),
                 )
             )
+
+            # A macro-space agent (the torch SmartAgent) selects macro-actions;
+            # the wrapped env expands them through the ordinary step path.
+            if getattr(agent, 'action_space_is_macro', False):
+                env = MacroActionEnv(env)
 
             # Create a trainer and run training
             trainer = Trainer(

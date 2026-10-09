@@ -13,12 +13,14 @@ from env.base_agent import BaseAgent
 from env import core
 from agent.train import train_agent
 from agent.simple_agent import SimpleAgent
-# from agent.smart_agent import SmartAgent
+from agent.smart_agent import SmartAgent
+from env.macro_action import MacroActionEnv
 
 def get_action_space_size() -> int:
+    # The DQN selects MACRO-actions (design unit U3 fix 2): the action space is
+    # the macro-action catalogue, not the 22-34 primitive typed actions.
     tmp_env = GoalEnv(goal=HaveScratch.with_goal(core.Void()))
-    action_space_size = tmp_env.action_space_size()
-    return action_space_size
+    return MacroActionEnv(tmp_env).action_space_size()
 
 
 def main() -> None:
@@ -71,25 +73,26 @@ def main() -> None:
                 seed=seed,
             )
         elif agent_type == "smart":
-            raise NotImplementedError("SmartAgent is not implemented in this code snippet.")
-            # agent = SmartAgent(
-            #     action_space_size=action_space_size,
-            #     input_dim=input_dim,
-            #     feature_dim=feature_dim,
-            #     hidden_dim=hidden_dim,
-            #     hidden_amount=hidden_amount,
-            #     learning_rate=learning_rate,
-            #     gamma=gamma,
-            #     epsilon_start=epsilon_start,
-            #     epsilon_end=epsilon_end,
-            #     epsilon_decay=epsilon_decay,
-            #     replay_buffer_capacity=replay_buffer_capacity,
-            #     batch_size=batch_size,
-            #     target_update_frequency=target_update_frequency,
-            #     device=device,
-            #     dropout_rate=dropout_rate,
-            #     seed=seed,
-            # )
+            agent = SmartAgent(
+                action_space_size=action_space_size,
+                input_dim=input_dim,
+                feature_dim=feature_dim,
+                hidden_dim=hidden_dim,
+                hidden_amount=hidden_amount,
+                learning_rate=learning_rate,
+                gamma=gamma,
+                epsilon_start=epsilon_start,
+                epsilon_end=epsilon_end,
+                epsilon_decay=epsilon_decay,
+                replay_buffer_capacity=replay_buffer_capacity,
+                batch_size=batch_size,
+                target_update_frequency=target_update_frequency,
+                device=device,
+                dropout_rate=dropout_rate,
+                seed=seed,
+            )
+            # Marker read by agent/train.py: train over the macro-action space.
+            agent.action_space_is_macro = True
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
 

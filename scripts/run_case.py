@@ -10,10 +10,21 @@ reason instead of a fake pass.
 Examples:
     python scripts/run_case.py --list
     python scripts/run_case.py --selftest
+    python scripts/run_case.py --list-macros
     python scripts/run_case.py --case binary_int --agent simple --max-steps 20
+    python scripts/run_case.py --case binary_int --macros --max-steps 20
+    python scripts/run_case.py --case binary_int --agent smart --max-steps 20
     python scripts/run_case.py --case all --agent simple --max-steps 40 --json
+    python scripts/run_case.py --case binary_int --agent smart \\
+        --macro-prior /path/to/macros.json --max-steps 20
     python scripts/run_case.py --case boolean_lt --agent llm \\
         --base-url http://localhost:8000 --model local-model --max-steps 5
+
+The default agent selection space is the primitive catalogue.  ``--macros`` (and
+``--agent smart``, whose DQN action space is the macro-action set) switches the
+selection space to the bounded macro-action catalogue in
+``env/macro_action.py``; the primitives still run through the ordinary
+action/reward path.
 """
 from __future__ import annotations
 import argparse
@@ -96,11 +107,21 @@ def _last_action_name(state) -> str:
 
 
 def _print_step(record: dict) -> None:
+    macro = record.get('macro')
+    macro_txt = f" macro={macro}" if macro else ""
     print(
-        f"step {record['step']}: action={record['action']} ok={record['ok']} "
-        f"cost={record['cost']} wall_ms={record['wall_ms']} "
+        f"step {record['step']}: action={record['action']}{macro_txt} "
+        f"ok={record['ok']} cost={record['cost']} reward={record['reward']} "
+        f"goal={record['goal']} wall_ms={record['wall_ms']} "
         f"err={record['err']}"
     )
+    for primitive in record.get('primitives') or []:
+        print(
+            f"  primitive {primitive['primitive']}: "
+            f"action={primitive['action']} ok={primitive['ok']} "
+            f"cost={primitive['cost']} reward={primitive['reward']} "
+            f"goal={primitive['goal']}"
+        )
 
 
 # ---------------------------------------------------------------- registry ---
@@ -233,25 +254,86 @@ class _SimplePolicy:
         return RawAction.with_raw_args(index, arg1, arg2, arg3)
 
 
-def _make_policy(agent_kind: str, state, seed: int, base_url, model):
+class _MacroSimplePolicy:
+    """Seeded explorer over the macro-action catalogue (macro selection space)."""
+
+    def __init__(self, env, seed: int = 0):
+        self._env = env
+        offset = _goal_rng_offset(env.full_state)
+        self._rng = random.Random((seed ^ offset) & 0xFFFFFFFF)
+
+    def select_action(self, state):
+        from env.action import RawAction
+
+        index = self._rng.randrange(1, self._env.action_space_size() + 1)
+        return RawAction.with_raw_args(index, 0, 0, 0)
+
+
+def _make_smart_agent(env, seed: int):
+    """The repo's torch DQN over the macro-action selection space."""
+    from agent.smart_agent import SmartAgent
+    from config import agent_settings as s
+
+    return SmartAgent(
+        action_space_size=env.action_space_size(),
+        input_dim=s.INPUT_DIM,
+        feature_dim=s.FEATURE_DIM,
+        hidden_dim=s.HIDDEN_DIM,
+        hidden_amount=s.HIDDEN_AMOUNT,
+        learning_rate=s.LEARNING_RATE,
+        gamma=s.GAMMA,
+        epsilon_start=s.EPSILON_START,
+        epsilon_end=s.EPSILON_END,
+        epsilon_decay=s.EPSILON_DECAY,
+        replay_buffer_capacity=s.REPLAY_BUFFER_CAPACITY,
+        batch_size=s.BATCH_SIZE,
+        target_update_frequency=s.TARGET_UPDATE_FREQUENCY,
+        device=s.DEVICE,
+        dropout_rate=s.DROPOUT_RATE,
+        seed=seed,
+    )
+
+
+def _make_policy(agent_kind: str, env, seed: int, base_url, model):
+    from env.macro_action import MacroActionEnv
+
     if agent_kind == 'llm':
         from agent.llm_agent import LlmAgent
 
         return LlmAgent(base_url=base_url, model=model)
-    return _SimplePolicy(state, seed=seed)
+    if agent_kind == 'smart':
+        return _make_smart_agent(env, seed)
+    if isinstance(env, MacroActionEnv):
+        return _MacroSimplePolicy(env, seed=seed)
+    return _SimplePolicy(env.full_state, seed=seed)
 
 
 # -------------------------------------------------------------- execution ----
 def run_case(spec: dict, agent_kind: str, max_steps: int, seed: int,
-             base_url: str | None, model: str | None) -> dict:
-    env = spec['builder'](max_steps)
-    policy = _make_policy(agent_kind, env.full_state, seed, base_url, model)
+             base_url: str | None, model: str | None,
+             use_macros: bool = False,
+             catalogue=None) -> dict:
+    raw_env = spec['builder'](max_steps)
+    macro_env = None
+    env = raw_env
+    if use_macros or agent_kind == 'smart':
+        from env.macro_action import MacroActionEnv
+
+        macro_env = MacroActionEnv(raw_env, catalogue=catalogue)
+        env = macro_env
+    policy = _make_policy(agent_kind, env, seed, base_url, model)
     goal_symbol = _goal_symbol(_goal_of(env))
+    if macro_env is not None:
+        print(
+            f"MACRO SELECTION SPACE ({macro_env.action_space_size()}): "
+            + ', '.join(m.name for m in macro_env.macro_actions)
+        )
 
     steps = []
     start = time.perf_counter()
     for i in range(1, max_steps + 1):
         step_start = time.perf_counter()
+        prev_state = env.full_state
         try:
             action = policy.select_action(env.full_state)
             next_state, reward, terminated, truncated = env.step(action)
@@ -266,6 +348,8 @@ def run_case(spec: dict, agent_kind: str, max_steps: int, seed: int,
                 'err': f'{type(e).__name__}: {e}'[:200],
                 'reward': 0.0,
                 'goal': False,
+                'macro': None,
+                'primitives': [],
             }
             steps.append(record)
             _print_step(record)
@@ -286,9 +370,30 @@ def run_case(spec: dict, agent_kind: str, max_steps: int, seed: int,
             'err': error[1] if error is not None else 'none',
             'reward': round(reward, 6),
             'goal': bool(next_state.goal_achieved()),
+            'macro': (
+                macro_env.last_macro.name
+                if macro_env is not None and macro_env.last_macro is not None
+                else None
+            ),
+            'primitives': (
+                macro_env.last_primitive_trace if macro_env is not None else []
+            ),
         }
         steps.append(record)
         _print_step(record)
+
+        # Train online when the agent is a learner (the torch DQN) so the smart
+        # run is a real short training episode over the macro-action set.
+        if agent_kind == 'smart' and hasattr(policy, 'train'):
+            policy.train(
+                state=prev_state,
+                action=action,
+                reward=reward,
+                next_state=next_state,
+                terminated=terminated,
+                truncated=truncated,
+            )
+
         if terminated or truncated:
             break
 
@@ -302,12 +407,18 @@ def run_case(spec: dict, agent_kind: str, max_steps: int, seed: int,
         'total_wall_s': round(elapsed, 6),
         'max_history': final_state.history_amount(),
         'dropped_history': final_state.dropped_history_count(),
+        'action_space': env.action_space_size(),
+        'macro_actions': (
+            macro_env.action_space_size() if macro_env is not None else None
+        ),
     }
     print(
         f"SUMMARY actions={summary['actions']} reward={summary['reward']} "
         f"goal={summary['goal']} total_wall_s={summary['total_wall_s']} "
         f"max_history={summary['max_history']} "
-        f"dropped_history={summary['dropped_history']}"
+        f"dropped_history={summary['dropped_history']} "
+        f"action_space={summary['action_space']} "
+        f"macro_actions={summary['macro_actions']}"
     )
     return {
         'case': spec['name'],
@@ -360,6 +471,42 @@ def _print_selftest(max_steps: int) -> None:
         print()
 
 
+def _macro_catalogue(args):
+    if args.macro_prior:
+        from env.macro_action import catalogue_from_json
+
+        return catalogue_from_json(args.macro_prior)
+    return None
+
+
+def _print_macros(args) -> int:
+    from env.macro_action import MacroActionEnv, goal_family
+
+    registry = _build_registry()
+    if args.case == 'all':
+        specs = [s for s in registry if not s['skip']]
+    else:
+        try:
+            specs = [_find_case(registry, args.case)]
+        except KeyError:
+            print(f"unknown case {args.case!r}", file=sys.stderr)
+            return 2
+    catalogue = _macro_catalogue(args)
+    for spec in specs:
+        env = spec['builder'](args.max_steps)
+        menv = MacroActionEnv(env, catalogue=catalogue)
+        print(
+            f"== case {spec['name']} family={goal_family(env.full_state)} "
+            f"macros={menv.action_space_size()} "
+            f"primitive_basic_actions={env.action_space_size()} =="
+        )
+        for index, macro in enumerate(menv.macro_actions, start=1):
+            print(f"  [{index}] {macro.name} (family={macro.family}): "
+                  f"{macro.description}")
+            print(f"      expansion: {macro.describe(menv)}")
+    return 0
+
+
 def _run_one(spec: dict, args) -> dict:
     print(f"===== case {spec['name']} ({spec['area']}) =====")
     return run_case(
@@ -369,6 +516,8 @@ def _run_one(spec: dict, args) -> dict:
         seed=args.seed,
         base_url=args.base_url,
         model=args.model,
+        use_macros=args.macros,
+        catalogue=_macro_catalogue(args),
     )
 
 
@@ -380,7 +529,17 @@ def main(argv: list[str] | None = None) -> int:
                         help='print case name, goal type and allowed action count')
     parser.add_argument('--selftest', action='store_true',
                         help='print each case goal, initial observation and goal flag')
-    parser.add_argument('--agent', choices=['simple', 'llm'], default='simple')
+    parser.add_argument('--agent', choices=['simple', 'llm', 'smart'],
+                        default='simple')
+    parser.add_argument('--macros', action='store_true',
+                        help='expose the macro-action catalogue as the '
+                             'selection space instead of the raw typed actions')
+    parser.add_argument('--list-macros', action='store_true',
+                        help='print the macro-action catalogue for --case and exit')
+    parser.add_argument('--macro-prior', default=None,
+                        help='JSON file with the macro-action candidate list '
+                             '(option C injection seam); default is the '
+                             'built-in catalogue in env/macro_action.py')
     parser.add_argument('--max-steps', type=int, default=10)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--base-url', default=None)
@@ -391,6 +550,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         _print_list()
         return 0
+    if args.list_macros:
+        return _print_macros(args)
     if args.selftest:
         _print_selftest(args.max_steps)
         return 0

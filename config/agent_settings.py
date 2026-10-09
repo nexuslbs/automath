@@ -20,7 +20,7 @@ FORCE_EXPLORATION_INTERVAL: int = 50
 SAVE_INTERVAL: int = 1
 DEVICE: typing.Optional[typing.Any] = None
 SEED: int | None = 1
-AGENT_TYPE: str = "simple"
+AGENT_TYPE: str = "smart"
 AGENT_NAME: str = f"{AGENT_TYPE}_{FEATURE_DIM}_{HIDDEN_DIM}_{SEED or 0}"
 MODEL_PATH: str = (
     "tmp/trained_model.pt"

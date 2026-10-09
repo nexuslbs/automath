@@ -398,3 +398,52 @@ verification that must keep running, and they do.
 
 Regression: `scripts/check_bounded_memory.sh` runs the module under
 `ulimit -v`, which the old accumulating code cannot satisfy.
+
+## 7. U3 applied: macro-action layer and the torch SmartAgent (fix 2 + fix 4)
+
+Both remaining highest-value fixes from section 4 land in one commit.
+
+### Fix 2: bounded macro-action layer
+
+`env/macro_action.py` adds a small, deterministic catalogue of macro-actions. A
+macro-action is a named sequence of primitive `ESSENTIAL_ACTIONS` steps with
+fixed arguments. The agent selects ONE macro-action; `MacroActionEnv.step`
+expands it and drives the wrapped `GoalEnv.step` once per primitive, so the
+reward evaluator (`env/reward.py`) and the bounded history
+(`DEFAULT_MAX_HISTORY_STATE_SIZE`) stay on the single existing path. The
+per-macro reward is the sum of the primitive rewards.
+
+Built-in catalogue, by goal family:
+
+* `result` (arithmetic / boolean `HaveResultScratch`):
+  * `result_true`: CreateScratch(0,0,0) ; DefineScratchFromInt(1, from_int:IntBoolean, 1) ; VerifyGoal(0, from_int:StateScratchIndex, 1)
+  * `result_false`: same with value 0
+  * `result_write_true`: CreateScratch(0,0,0) ; DefineScratchFromInt(1, from_int:IntBoolean, 1)
+  * `result_check`: VerifyGoal(0, from_int:StateScratchIndex, 1)
+* `scratch` (indices / control-flow `HaveScratch`, also the generic fallback):
+  * `scratch_new`: CreateScratch(0,0,0)
+  * `scratch_clear`: ClearScratch(1,0,0)
+  * `scratch_check`: VerifyGoal(0, from_int:StateScratchIndex, 1)
+
+The `from_int:<TypeName>` argument token is resolved against the concrete
+environment at expansion time and is deterministic for that environment.
+
+The injection seam for option C is `scripts/run_case.py --macro-prior <json>`
+(loader `env/macro_action.catalogue_from_json`); the built-in catalogue is the
+default so the flag is optional. The offline LLM proposal pass is the NEXT unit.
+
+### Fix 4: torch SmartAgent enabled over the macro-action space
+
+* `agent/smart_agent.py` is imported again in `train.py`; the `smart` branch
+  constructs the DQN instead of raising `NotImplementedError`.
+* `config/agent_settings.py` sets `AGENT_TYPE = "smart"`.
+* `train.get_action_space_size()` returns the MACRO-action count via
+  `MacroActionEnv`, and `agent/train.py` wraps the training env in
+  `MacroActionEnv` when the agent carries `action_space_is_macro`, so the DQN
+  action space IS the macro-action set.
+* `scripts/run_case.py --agent smart` builds the `SmartAgent` with
+  `action_space_size = len(catalogue)`, runs a short episode and calls
+  `SmartAgent.train` on every macro transition.
+
+Action-space size on the binary_int case: 4 macro-actions vs 22 in the curated
+`ESSENTIAL_ACTIONS` set (34 basic actions in the full catalogue).

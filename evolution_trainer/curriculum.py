@@ -98,63 +98,52 @@ def bfs_min_steps(spec: Spec) -> Tuple[Optional[int], Optional[Tuple[str, ...]]]
     return None, None
 
 
-def distance_to_goal(spec: Spec) -> Dict[str, int]:
-    """BFS distance (in actions) from every reachable state to a goal state.
+def solution_path(spec: Spec) -> Dict[str, Any]:
+    """The unique BFS solution as a map ``state identity -> correct action key``.
 
-    A backward BFS over the reachable transition graph. Used to build the
-    "only one step is correct" gate: an action is CORRECT iff it strictly
-    reduces the distance to the goal.
+    The dynamic-nodes specs have exactly ONE minimal action sequence (asserted
+    by ``dynamic_env.tests.check_minimal_solution_unique``), so replaying the
+    BFS witness gives, for every canonical state, the single correct next
+    action. That is exactly the "only one step is correct per state" relation
+    the S3 free stage discards against. Finite by construction (the witness has
+    ``min`` steps), unlike an unbounded forward reachability search.
     """
     env = DynamicEnv(spec)
-    start = env.reset()
-    states: Dict[str, Any] = {start.identity(): start}
-    edges: List[Tuple[str, str]] = []
-    frontier = [start]
-    while frontier:
-        nxt = []
-        for state in frontier:
-            for action in env.legal_actions(state):
-                result = env.step(state, action)
-                tid = result.state.identity()
-                edges.append((state.identity(), tid))
-                if tid not in states:
-                    states[tid] = result.state
-                    nxt.append(result.state)
-        frontier = nxt
-    reverse: Dict[str, List[str]] = {}
-    for src, dst in edges:
-        reverse.setdefault(dst, []).append(src)
-    dist: Dict[str, int] = {}
-    queue: deque = deque()
-    for ident, state in states.items():
-        if env.goal_reached(state):
-            dist[ident] = 0
-            queue.append(ident)
-    while queue:
-        current = queue.popleft()
-        for src in reverse.get(current, []):
-            if src not in dist:
-                dist[src] = dist[current] + 1
-                queue.append(src)
-    return dist
+    minimum, word = bfs_min_steps(spec)
+    if word is None:
+        raise ValueError("spec %s has no reachable goal" % spec.spec_id)
+    state = env.reset()
+    correct: Dict[str, str] = {}
+    for key in word:
+        correct[state.identity()] = key
+        match = None
+        for action in env.legal_actions(state):
+            if action.key() == key:
+                match = action
+                break
+        if match is None:  # pragma: no cover - BFS word is legal by construction
+            raise ValueError("BFS witness action %r not legal" % key)
+        state = env.step(state, match).state
+    return {"min_steps": minimum, "word": tuple(word), "correct": correct}
 
 
 def shortest_path_gate(spec: Spec,
-                       dist: Optional[Dict[str, int]] = None
+                       correct: Optional[Dict[str, str]] = None
                        ) -> Callable[[DynamicEnv, Any, Action], bool]:
-    """A gate accepting ONLY a step that strictly reduces the goal distance.
+    """A gate accepting ONLY the single correct action for the current state.
 
     Rejected steps are discarded by ``EvolutionTrainer`` with no state change.
     """
-    table = distance_to_goal(spec) if dist is None else dist
+    table = solution_path(spec)["correct"] if correct is None else correct
 
     def gate(env: DynamicEnv, state: Any, action: Action) -> bool:
-        here = table.get(state.identity())
-        if here is None:
-            return True  # state outside the reachable set: accept (never happens)
-        result = env.step(state, action)
-        there = table.get(result.state.identity())
-        return there is not None and there == here - 1
+        expected = table.get(state.identity())
+        if expected is None:
+            # Off the canonical path (a terminal or unknown state): accept, so
+            # a solved episode is never blocked. The gate can only ever be
+            # reached on the canonical path because wrong steps do not move.
+            return True
+        return action.key() == expected
 
     return gate
 
@@ -360,9 +349,9 @@ def stage_s2(out_dir: str, seed: int = 7) -> Dict[str, Any]:
 
 def stage_s3(out_dir: str, seed: int = 7) -> Dict[str, Any]:
     spec = load_spec(spec_path("spec_dynamic_group"))
-    minimum, word = bfs_min_steps(spec)
-    dist = distance_to_goal(spec)
-    gate = shortest_path_gate(spec, dist)
+    path = solution_path(spec)
+    minimum, word = path["min_steps"], path["word"]
+    gate = shortest_path_gate(spec, path["correct"])
     strict = run_evolution(spec, "s3_strict", out_dir, generations=8,
                            population=10, seed=seed, strict_keys=word,
                            subagent_depth=0)
@@ -379,7 +368,7 @@ def stage_s3(out_dir: str, seed: int = 7) -> Dict[str, Any]:
         "stage": "S3", "spec_id": spec.spec_id, "min_steps": minimum,
         "strict_word": list(word or ()),
         "single_correct_step_per_state": True,
-        "distinct_reachable_states": len(dist),
+        "canonical_states": len(path["correct"]),
         "overfitting": {
             "strict_best_fitness": strict["best_fitness"],
             "strict_best_free_discard_eval": strict_best_free,

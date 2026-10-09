@@ -16,10 +16,10 @@ from dynamic_env.spec import load_spec
 
 from .curriculum import (
     bfs_min_steps,
-    distance_to_goal,
     minimal_and_max,
     run_evolution,
     shortest_path_gate,
+    solution_path,
     spec_path,
 )
 from .heldout import HELDOUT_CASES, _HELDOUT_DIR, evaluate_case
@@ -72,19 +72,23 @@ def check_max_rule() -> str:
 
 def check_gate_single_correct_step() -> str:
     spec = _load("spec_dynamic_group")
-    dist = distance_to_goal(spec)
-    minimum, word = bfs_min_steps(spec)
+    path = solution_path(spec)
+    minimum, word = path["min_steps"], path["word"]
     env = DynamicEnv(spec)
     start = env.reset()
-    if dist.get(start.identity()) != minimum:
-        raise CheckFailure("gate_single_correct_step",
-                           "start distance %r != min %r"
-                           % (dist.get(start.identity()), minimum))
-    gate = shortest_path_gate(spec, dist)
+    gate = shortest_path_gate(spec, path["correct"])
     accepts = [a.key() for a in env.legal_actions(start) if gate(env, start, a)]
     if len(accepts) != 1:
         raise CheckFailure("gate_single_correct_step",
                            "expected exactly 1 correct action, got %r" % accepts)
+    if accepts[0] != word[0]:
+        raise CheckFailure("gate_single_correct_step",
+                           "gate accepts %r but BFS word starts %r"
+                           % (accepts[0], word[0]))
+    if len(path["correct"]) != minimum:
+        raise CheckFailure("gate_single_correct_step",
+                           "canonical states %d != min %d"
+                           % (len(path["correct"]), minimum))
     return "exactly one correct action at the start: %r (min=%d)" % (accepts, minimum)
 
 
@@ -104,8 +108,8 @@ def check_strict_runs_solve() -> str:
 def check_free_discard_recovers() -> str:
     spec = _load("spec_dynamic_group")
     minimum, word = bfs_min_steps(spec)
-    dist = distance_to_goal(spec)
-    gate = shortest_path_gate(spec, dist)
+    path = solution_path(spec)
+    gate = shortest_path_gate(spec, path["correct"])
     strict = run_evolution(spec, "test_s3_strict", "/tmp/curriculum_tests",
                            generations=4, population=8, seed=7,
                            strict_keys=word, subagent_depth=0)

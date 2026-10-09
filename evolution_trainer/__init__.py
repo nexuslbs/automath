@@ -27,10 +27,10 @@ from .rl_train import ReinforceTrainer
 from .curriculum import (
     CurriculumTrainer,
     bfs_min_steps,
-    distance_to_goal,
     minimal_and_max,
     run_evolution,
     shortest_path_gate,
+    solution_path,
 )
 
 __all__ = [
@@ -47,12 +47,12 @@ __all__ = [
     "ReinforceTrainer",
     "RolloutResult",
     "bfs_min_steps",
-    "distance_to_goal",
     "minimal_and_max",
     "mix_genomes",
     "mutate_genome",
     "run_evolution",
     "shortest_path_gate",
+    "solution_path",
     "state_dim",
     "state_features",
 ]

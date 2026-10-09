@@ -27,11 +27,12 @@ four-stage curriculum instead of building another trainer.
 
 `bfs_min_steps(spec)` is an independent BFS in the runner; it is asserted equal
 to the engine's `minimal_length` and `bfs_minimal_word` for every shipped spec
-(`curriculum_tests.check_bfs_matches_engine`). `distance_to_goal(spec)` is a
-backward BFS over the reachable transition graph; the S3 gate accepts ONLY an
-action that strictly reduces the goal distance, which is what makes "only one
-step is correct per state" mechanical (asserted:
-`check_gate_single_correct_step`).
+(`curriculum_tests.check_bfs_matches_engine`). `solution_path(spec)` replays
+that unique witness into a `state -> single correct action` map; the S3 gate
+accepts ONLY that action, which is what makes "only one step is correct per
+state" mechanical and FINITE (an unbounded forward reachability search over the
+grouping specs does not terminate, because every combine mints a fresh node id).
+Asserted: `check_gate_single_correct_step`.
 
 | spec | BFS min | MAX rule | MAX |
 | --- | --- | --- | --- |

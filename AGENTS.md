@@ -91,7 +91,7 @@ a dependency to build or test it.
   DISCARDED, S4 multi-step). Standard library only.
 * `bfs_min_steps` (runner) MUST equal the engine's `minimal_length` and
   `bfs_minimal_word`; the S4 MAX is `min+2`, or `max(min+2, min*2)` for a spec
-  whose id contains `axiom`. `distance_to_goal` + `shortest_path_gate` make
+  whose id contains `axiom`. `solution_path` + `shortest_path_gate` make
   "only one step is correct per state" mechanical.
 * `EvolutionTrainer.step_gate` (default `None`) and `run(on_generation=None)`
   are additive hooks; the default paths keep Unit B behaviour.

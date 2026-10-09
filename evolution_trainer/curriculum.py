@@ -422,7 +422,18 @@ def stage_s4(spec_id: str, out_dir: str, generations: int = 1500,
     trainer = CurriculumTrainer(spec, config, spec_id=spec_id)
     stop = EarlyStop(plateau_checkpoints=plateau_checkpoints, check_every=25)
     start = time.perf_counter()
-    history = trainer.run(on_generation=stop if stop_after_plateau else None)
+
+    def on_generation(generation: int, record: Dict[str, Any]) -> bool:
+        shall_stop = stop(generation, record)
+        if generation % stop.check_every == 0 and stop.snapshots:
+            snapshot = dict(stop.snapshots[-1])
+            snapshot["elapsed_s"] = round(time.perf_counter() - start, 3)
+            snapshot["spec_id"] = spec_id
+            write_json(os.path.join(out_dir, "snapshot_gen_%05d.json" % generation),
+                       snapshot)
+        return shall_stop
+
+    history = trainer.run(on_generation=on_generation if stop_after_plateau else None)
     elapsed = time.perf_counter() - start
     best = best_agent(trainer)
     result = {

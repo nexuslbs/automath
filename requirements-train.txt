@@ -4,9 +4,14 @@
 #   agent/smart_agent.py:6-8  import torch / from torch import nn /
 #                              import torch.nn.functional as F
 # It is intentionally NOT in requirements.txt so that the default test and
-# training paths (which use agent/simple_agent.py) do not pull a multi-GB
-# wheel. Install with:
+# training paths do not pull a multi-GB wheel. Install the CPU wheel with:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# or:
 #   pip install -r requirements-train.txt
 # under Python 3.12-3.14.
+#
+# Unit U3 (fix 4) installed and measured on the automath host:
+#   Python 3.14.4, torch 2.14.1+cpu, numpy 2.5.3
+#   python -c "import torch; print(torch.__version__)"  ->  2.14.1+cpu
 -r requirements.txt
 torch>=2.0

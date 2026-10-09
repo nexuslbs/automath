@@ -171,7 +171,8 @@ def write_snapshot(cfg: EvoConfig, gen: int, population: List[Genome],
     emit("SNAPSHOT gen=%d best=%.4f shaped=%.4f solved=%d/%d rss=%.1fMB file=%s"
          % (gen, best.fitness,
             (result.shaped_return if result else 0.0),
-            best.solved_feasible, len(result.per_state) if result else 0,
+            best.solved_feasible,
+            (result.feasible_total if result else 0),
             payload["rss_mb"], path))
     return path
 
@@ -282,8 +283,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             gen += 1
             history.append(record)
             append_history_jsonl(cfg, record)
-            best = max(population, key=lambda g: g.fitness)
-            mean_fitness = sum(g.fitness for g in population) / len(population)
+            # New offspring are NOT evaluated until the next generation, so
+            # their default fitness (0.0) must never outrank an evaluated
+            # genome with a negative shaped return.  Pick the generation's
+            # evaluated best by gid, and average only evaluated genomes.
+            evaluated = [g for g in population if g._result is not None]
+            best = next((g for g in evaluated if g.gid == record["best_gid"]),
+                        None)
+            if best is None or best._result is None:
+                best = max(evaluated, key=lambda g: g.fitness,
+                           default=population[0])
+            mean_fitness = (sum(g.fitness for g in evaluated) / len(evaluated)
+                            if evaluated else 0.0)
             if best.fitness > best_ever + cfg.plateau_tol:
                 best_ever = best.fitness
                 gens_since_improve = 0

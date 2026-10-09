@@ -39,11 +39,23 @@ from .evolution_semi import (
     blx,
     bundle_validation,
     core_validation_shaped,
+    evaluate_genome_shaped,
     evolve_one_generation_shaped,
     make_shaped_agent,
     run_bundle_shaped,
 )
-from .nodes import Group, One, Zero
+from .curriculum import (
+    CurriculumSchedule,
+    DEFAULT_PHASES,
+    TIER_EASY,
+    TIER_HARD,
+    TIER_MEDIUM,
+    assign_tier,
+    difficulty,
+    excluded_infeasible,
+    tiered_cases,
+)
+from .nodes import Group, One, Zero, size
 from .target_features import (
     PolicyNet,
     START_ACTION,
@@ -305,6 +317,162 @@ def check_bundle_validation() -> str:
                res.shaped_return, res.total_steps))
 
 
+# --------------------------------------------------------------------------
+# Flavor B: curriculum schedule checks (tiers, transitions, config keys, and
+# the proof that the flavor-A fitness formula is untouched on a curriculum
+# bundle).
+# --------------------------------------------------------------------------
+
+def check_curriculum_tiers() -> str:
+    tiers = tiered_cases()
+    counts = {t: len(tiers[t]) for t in (TIER_EASY, TIER_MEDIUM, TIER_HARD)}
+    if any(counts[t] == 0 for t in (TIER_EASY, TIER_MEDIUM, TIER_HARD)):
+        raise CheckFailure("curriculum_tiers", "empty tier: %r" % counts)
+    excluded = excluded_infeasible()
+    if sum(counts.values()) + excluded != 320:
+        raise CheckFailure("curriculum_tiers",
+                           "partition %d + excluded %d != 320"
+                           % (sum(counts.values()), excluded))
+    # determinism: a fresh partition assigns exactly the same case names
+    again = tiered_cases()
+    for t in (TIER_EASY, TIER_MEDIUM, TIER_HARD):
+        if (sorted(c.name for c in tiers[t])
+                != sorted(c.name for c in again[t])):
+            raise CheckFailure("curriculum_tiers",
+                               "nondeterministic tier %d" % t)
+    if assign_tier(tiers[TIER_EASY][0]) != TIER_EASY:
+        raise CheckFailure("curriculum_tiers",
+                           "assign_tier disagrees with the partition")
+    return ("counts easy=%d medium=%d hard=%d excluded_unreachable=%d "
+            "total=320, deterministic"
+            % (counts[TIER_EASY], counts[TIER_MEDIUM], counts[TIER_HARD],
+               excluded))
+
+
+def check_curriculum_tier_ordering() -> str:
+    tiers = tiered_cases()
+    means = {}
+    for t in (TIER_EASY, TIER_MEDIUM, TIER_HARD):
+        ds = [difficulty(c) for c in tiers[t]]
+        means[t] = sum(ds) / len(ds)
+    if not (means[TIER_EASY] < means[TIER_MEDIUM] < means[TIER_HARD]):
+        raise CheckFailure("curriculum_tier_ordering",
+                           "difficulty not increasing: %r" % means)
+    return ("mean difficulty easy=%.2f < medium=%.2f < hard=%.2f"
+            % (means[TIER_EASY], means[TIER_MEDIUM], means[TIER_HARD]))
+
+
+def check_curriculum_phase_transitions() -> str:
+    phases = [
+        {"name": "p0", "tiers": [TIER_EASY], "generations": 2, "batch": 5},
+        {"name": "p1", "tiers": [TIER_EASY, TIER_MEDIUM], "generations": 3,
+         "batch": 7},
+        {"name": "p2", "tiers": [TIER_EASY, TIER_MEDIUM, TIER_HARD],
+         "generations": 4, "batch": 9},
+    ]
+    sch = CurriculumSchedule(phases=phases, seed=SEED)
+    want = {0: 0, 1: 0, 2: 1, 4: 1, 5: 2, 99: 2}
+    for gen, idx in want.items():
+        got = sch.phase_index(gen)
+        if got != idx:
+            raise CheckFailure("curriculum_phase_transitions",
+                               "gen %d -> phase %d, want %d"
+                               % (gen, got, idx))
+    if sch.tiers_for(0) != [TIER_EASY]:
+        raise CheckFailure("curriculum_phase_transitions",
+                           "tiers_for(0) wrong")
+    if sch.tiers_for(2) != [TIER_EASY, TIER_MEDIUM]:
+        raise CheckFailure("curriculum_phase_transitions",
+                           "tiers_for(2) wrong")
+    if sch.tiers_for(5) != [TIER_EASY, TIER_MEDIUM, TIER_HARD]:
+        raise CheckFailure("curriculum_phase_transitions",
+                           "tiers_for(5) wrong")
+    if (sch.batch_for(0), sch.batch_for(2), sch.batch_for(5)) != (5, 7, 9):
+        raise CheckFailure("curriculum_phase_transitions",
+                           "per-phase batch not honored")
+    return "gen 0-1=p0, 2-4=p1, 5+=p2; expanding tiers; batches 5/7/9"
+
+
+def check_curriculum_config_keys() -> str:
+    if CurriculumSchedule.from_config({"enabled": False}, SEED) is not None:
+        raise CheckFailure("curriculum_config_keys",
+                           "enabled:false not honored")
+    if CurriculumSchedule.from_config(None, SEED) is not None:
+        raise CheckFailure("curriculum_config_keys", "None config not honored")
+    data = {
+        "enabled": True,
+        "seed": SEED + 1,
+        "rule": "generation_schedule",
+        "thresholds": {"easy_prefix_max_target_size": 1},
+        "phases": [{"name": "only", "tiers": [TIER_EASY], "generations": 10,
+                    "batch": 3}],
+    }
+    sch = CurriculumSchedule.from_config(data, SEED)
+    if sch is None or sch.seed != SEED + 1:
+        raise CheckFailure("curriculum_config_keys", "seed key not honored")
+    if sch.phase_index(50) != 0 or sch.batch_for(0) != 3:
+        raise CheckFailure("curriculum_config_keys",
+                           "phases/batch keys not honored")
+    # a default-EASY prefix with target size > 1 must leave EASY once the
+    # easy target-size threshold is tightened to 1
+    known = None
+    for c in tiered_cases()[TIER_EASY]:
+        target = getattr(c.env.goal, "target", None)
+        if "/prefix" in c.name and target is not None and size(target) > 1:
+            known = c
+            break
+    if known is None:
+        raise CheckFailure("curriculum_config_keys",
+                           "no tier-1 prefix with target size > 1")
+    if assign_tier(known, data["thresholds"]) == TIER_EASY:
+        raise CheckFailure("curriculum_config_keys",
+                           "threshold key not honored for %s" % known.name)
+    try:
+        CurriculumSchedule(phases=DEFAULT_PHASES, seed=SEED, rule="nope")
+    except ValueError:
+        pass
+    else:
+        raise CheckFailure("curriculum_config_keys", "bad rule accepted")
+    # sampling is a pure function of the (seed, generation) pair
+    s0a = [c.name for c in sch.sample_for(0)]
+    s0b = [c.name for c in sch.sample_for(0)]
+    s1 = [c.name for c in sch.sample_for(1)]
+    if s0a != s0b:
+        raise CheckFailure("curriculum_config_keys",
+                           "sampling is not deterministic")
+    if s0a == s1 and len(sch.cases_by_tier[TIER_EASY]) > 3:
+        raise CheckFailure("curriculum_config_keys",
+                           "generation not mixed into the sample seed")
+    return ("enabled/seed/phases/batch/thresholds honored; bad rule rejected; "
+            "sample(gen0)==sample(gen0) and differs from sample(gen1)")
+
+
+def check_curriculum_bundle_and_fitness() -> str:
+    sch = CurriculumSchedule(
+        phases=[{"name": "easy", "tiers": [TIER_EASY], "generations": 5,
+                 "batch": 4}], seed=SEED)
+    bundle = sch.bundle_for(0, 20)
+    if not bundle.states or len(bundle.states) > 4:
+        raise CheckFailure("curriculum_bundle_fitness",
+                           "bad bundle size %d" % len(bundle.states))
+    if any(not s.feasible for s in bundle.states):
+        raise CheckFailure("curriculum_bundle_fitness",
+                           "infeasible dense tier-1 state in bundle")
+    cfg = _cfg(episodes=1, total_budget=20)
+    rng = random.Random(SEED)
+    g = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg, "g-cur")
+    res = evaluate_genome_shaped(g, bundle, cfg, SEED)
+    want = res.shaped_return + cfg.solved_rate_weight * res.solved_rate()
+    if abs(g.fitness - want) > 1e-9:
+        raise CheckFailure("curriculum_bundle_fitness",
+                           "fitness formula drifted: %r != %r"
+                           % (g.fitness, want))
+    return ("bundle states=%d feasible=%d fitness=%.4f == shaped_return + "
+            "%.2f*solved_rate"
+            % (len(bundle.states), len(bundle.feasible()), g.fitness,
+               cfg.solved_rate_weight))
+
+
 NEW_CHECKS: List[Tuple[str, object]] = [
     ("reward_constants", check_reward_constants),
     ("goal_similarity", check_goal_similarity),
@@ -317,6 +485,11 @@ NEW_CHECKS: List[Tuple[str, object]] = [
     ("blx_bounds", check_blx_bounds),
     ("core_validation_shaped", check_core_validation_shaped),
     ("bundle_validation", check_bundle_validation),
+    ("curriculum_tiers", check_curriculum_tiers),
+    ("curriculum_tier_ordering", check_curriculum_tier_ordering),
+    ("curriculum_phase_transitions", check_curriculum_phase_transitions),
+    ("curriculum_config_keys", check_curriculum_config_keys),
+    ("curriculum_bundle_fitness", check_curriculum_bundle_and_fitness),
 ]
 
 
@@ -421,3 +594,32 @@ def test_action_scores_same_net_new_targets() -> None:
     agent.set_target(s2.target)
     a2 = agent.best_action(s2.key(), st)
     assert a2 in agent.valid(st.stack)
+
+
+# --------------------------------------------------------------------------
+# pytest-style tests for the flavor-B curriculum schedule.
+# --------------------------------------------------------------------------
+
+def test_curriculum_tiers_deterministic() -> None:
+    """Tier assignment is deterministic and covers the 320 dense cases."""
+    check_curriculum_tiers()
+
+
+def test_curriculum_tier_difficulty_order() -> None:
+    """Mean difficulty is strictly increasing over the three tiers."""
+    check_curriculum_tier_ordering()
+
+
+def test_curriculum_phase_transitions() -> None:
+    """Phase boundaries follow the configured per-phase generation lengths."""
+    check_curriculum_phase_transitions()
+
+
+def test_curriculum_config_keys_honored() -> None:
+    """enabled/seed/rule/thresholds/phases/batch are all honored."""
+    check_curriculum_config_keys()
+
+
+def test_curriculum_fitness_formula_unchanged() -> None:
+    """A curriculum bundle still scores with the flavor-A fitness formula."""
+    check_curriculum_bundle_and_fitness()

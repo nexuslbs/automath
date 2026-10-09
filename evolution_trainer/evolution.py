@@ -623,8 +623,27 @@ class EvolutionTrainer:
                 os.unlink(tmp)
 
     # -- driver ------------------------------------------------------------
-    def run(self) -> List[Dict[str, Any]]:
-        population = self._founders()
+    def run(self, warm_start: Optional[Sequence[Sequence[float]]] = None
+            ) -> List[Dict[str, Any]]:
+        """Evolve. ``warm_start`` optionally supplies founder genomes.
+
+        Unit C's MIX arm uses this to seed the fixed-weight evolution with the
+        genome an RL warm-start already learned (plus the caller's own mutated
+        copies). The default ``None`` is exactly Unit B's behaviour: random
+        founders, so ``train.py`` and the pure evolution arm are unchanged.
+        """
+        if warm_start:
+            population: List[Agent] = []
+            for genome in warm_start[:self.config.population_size]:
+                aid = self._next_aid(0, "w")
+                population.append(Agent(aid=aid, genome=list(genome),
+                                        origin="warm_start", birth_generation=0))
+            while len(population) < self.config.population_size:
+                aid = self._next_aid(0, "f")
+                population.append(Agent(aid=aid, genome=self.net.init(self.rng, scale=0.5),
+                                        origin="founder", birth_generation=0))
+        else:
+            population = self._founders()
         for generation in range(1, self.config.generations + 1):
             self._evaluate(population, generation)
             births = self._reproduce(population, generation)

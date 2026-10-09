@@ -21,6 +21,9 @@ Quick use::
 from .evolution import Agent, EpisodeResult, EvoConfig, EvolutionTrainer
 from .features import ActionFeaturizer, state_dim, state_features
 from .genome import MixResult, PolicyNet, mix_genomes, mutate_genome
+from .harness import Harness, RolloutResult
+from .mix_train import MixTrainer
+from .rl_train import ReinforceTrainer
 
 __all__ = [
     "ActionFeaturizer",
@@ -28,8 +31,12 @@ __all__ = [
     "EpisodeResult",
     "EvoConfig",
     "EvolutionTrainer",
+    "Harness",
     "MixResult",
+    "MixTrainer",
     "PolicyNet",
+    "ReinforceTrainer",
+    "RolloutResult",
     "mix_genomes",
     "mutate_genome",
     "state_dim",

@@ -31,6 +31,7 @@ library test runners are the primary contract; pytest is a mirror.
 /opt/automath/venv/bin/python -m dynamic_env.tests             # dynamic env, 13 checks
 /opt/automath/venv/bin/python -m pytest dynamic_env/tests.py   # pytest mirror
 /opt/automath/venv/bin/python -m evolution_trainer.tests       # evolution, 13 checks
+/opt/automath/venv/bin/python -m evolution_trainer.arms_tests  # Unit C arms, 10 checks
 /opt/automath/venv/bin/python -m pytest -q evolution_trainer/tests.py  # pytest mirror
 ```
 
@@ -67,6 +68,19 @@ a dependency to build or test it.
   and history (`history.csv`, `reward_trajectory.csv`) are written per
   generation. Keep this unit short and deterministic; long curriculum runs are
   later units.
+
+## Approach-comparison contract (Unit C)
+
+* `evolution_trainer/harness.py` is the SINGLE rollout + reward surface: all
+  arms must score episodes through it so a comparison is fair. It reproduces
+  Unit B's reward shaping exactly (pinned by `arms_tests`).
+* Three arms exist: `evolution` (Unit B fixed-weight, `compare_arms`), `rl`
+  (`rl_train.py`, REINFORCE with a baseline) and `mix` (`mix_train.py`, RL
+  warm-start then fixed-weight evolution). All use the same PolicyNet, features
+  and episode budget; `mix` splits, never doubles, its generations.
+* `EvolutionTrainer.run(warm_start=...)` is the only Unit B change; the default
+  call is unchanged, so `train.py` and the pure evolution arm keep Unit B
+  behaviour. See `docs/evolution/APPROACH_COMPARISON.md`.
 
 ## Branches
 

@@ -212,3 +212,23 @@ were read: `session-f2b11485-...` and `session-c6a75787-...`; plus
 not learn a solver on this box; the legacy full suite OOMs; work must be
 small and bounded. U1 inherits all of that and adds this parallel minimal-node
 branch.
+
+## 10. U2 addendum: bare-minimum training + generalization (measured)
+
+U2 (branch `new`) adds `new_approach/agent.py` and `new_approach/u2.py`:
+
+* `TabularAgent`, a deterministic target-conditioned tabular Q-learner trained
+  ONLY from the bare-minimum empty stack with the planner's unique optimal word
+  as supervision (seed 20261009). 10 goals from `Zero`/`One`/`Change` up to the
+  dynamic `Group` grouping basic nodes (`G(1;0)`, `G(1;1,1)`, `G(1;1,1,1)`,
+  `G(1;C(1),C(1))`, `G(C(1);G(1;0))`) plus one `ExprGoal` (`value==2`) case.
+* Generalization validation places the trained agent at 33 NEW initial states
+  (non-trivial prefixes of each goal's plan); all reach the same end state:
+  33/33 PASS. Train reachability 10/10.
+* A held-out target (`G(C(1);G(1;0,1))`) is NOT solved by the flat table (0/1,
+  structured failure) but IS solved by the structurally biased
+  `CompositionalAgent` (1/1), which reuses the learned local construction rules
+  and composes them through the dynamic `Group` node.
+* Deterministic and bounded: two independent train processes produce the same Q
+  digest and byte-identical tables; train 0.23 s / 22 MB RSS, validate 0.32 s /
+  22.3 MB RSS. Raw evidence: `docs/new-approach/U2-EVIDENCE.md`.

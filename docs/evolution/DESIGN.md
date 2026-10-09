@@ -176,7 +176,7 @@ sigma=0.5`; raw output in the evidence file):
 | --- | -------- | ---------- |
 | Stage 2 (guidance), 60 ep | 10/10 | 33/33 |
 | Stage 2 extended, 200 ep | 11/11 | 114/114 |
-| Stage 3 (valuation), 60 ep, seed 20261009 | 5/10 | 16/33 |
+| Stage 3 (valuation), 60 ep, seed 20261009 | 5/10 | 14/33 |
 | Stage 3, 2000 ep, seed 20261009 | 8/10 | 24/33 |
 | Stage 3, 2000 ep, 6-seed range | 1-8/10 | 10-26/33 (mean 21.7, median 24) |
 | Stage 3 extended, 200 ep | 1/11 | 16/114 |

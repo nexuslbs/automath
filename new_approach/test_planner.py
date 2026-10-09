@@ -141,9 +141,11 @@ def test_budget_max_search_nodes_and_no_infinite_loop() -> None:
     planner = _planner("evo", max_search_nodes=10)
     t0 = time.perf_counter()
     assert planner.plan(target, (junk,)) is None
-    # Search budget 0 also returns None, fast.
+    # Search budget 0 refuses a stack that genuinely needs SEARCH (not a
+    # canonical prefix): [One, One] needs MakeChange then MakeMul.
+    assert planner.plan(target, (One(), One())) == ["MakeChange", "MakeMul"]
     p0 = _planner("evo", max_search_nodes=0)
-    assert p0.plan(target, (One(),)) is None
+    assert p0.plan(target, (One(), One())) is None
     assert time.perf_counter() - t0 < 5.0
 
 

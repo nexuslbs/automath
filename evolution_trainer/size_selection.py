@@ -51,7 +51,13 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from dynamic_env.engine import Action, DynamicEnv, State, bfs_minimal_word
+from dynamic_env.engine import (
+    Action,
+    DynamicEnv,
+    State,
+    _step_internal,
+    bfs_minimal_word,
+)
 from dynamic_env.spec import Spec, load_spec
 
 # --------------------------------------------------------------------------
@@ -112,7 +118,9 @@ def episode_seed(selection_seed: int, generation: int, index: int) -> int:
 # --------------------------------------------------------------------------
 
 def masked_legal_actions(env: DynamicEnv, state: State,
-                         seen_ids: Set[str]) -> Tuple[Action, ...]:
+                         seen_ids: Set[str],
+                         actions: Optional[Sequence[Action]] = None
+                         ) -> Tuple[Action, ...]:
     """The legal actions that can still lie on a solution path.
 
     The dynamic-nodes transition is a pure function of ``(spec, state, action)``
@@ -122,14 +130,22 @@ def masked_legal_actions(env: DynamicEnv, state: State,
     contradicts having visited it earlier. Those actions are masked out; every
     action that stays is a genuinely legal action of ``env`` (operands present,
     guards satisfied).
+
+    ``actions`` may be the already-computed ``env.legal_actions(state)`` from
+    the caller. The pure transition engine is used directly: the full
+    ``is_legal`` re-check inside ``DynamicEnv.step`` re-enumerates the whole
+    action space for every candidate action and is combinatorially expensive on
+    states with many combine permutations.
     """
+    if actions is None:
+        actions = env.legal_actions(state)
     kept: List[Action] = []
-    for action in env.legal_actions(state):
+    for action in actions:
         try:
-            result = env.step(state, action)
+            new_state, _info = _step_internal(env.spec, state, action)
         except Exception:  # illegal by engine rules -> never keep it
             continue
-        if result.state.identity() in seen_ids:
+        if new_state.identity() in seen_ids:
             continue
         kept.append(action)
     return tuple(kept)
@@ -169,7 +185,7 @@ def rollout(net, genome: Sequence[float], spec: Spec,
         if not actions:
             break
         if mask_illegal:
-            masked = masked_legal_actions(env, state, seen)
+            masked = masked_legal_actions(env, state, seen, actions=actions)
             if masked:
                 actions = masked
         if epsilon > 0.0 and rng.random() < epsilon:
@@ -358,13 +374,17 @@ def _make_case(spec: Spec, start_state: State, witness: Sequence[str],
                    max_steps=int(spec.max_steps), spec=spec)
 
 
-def _candidate_stream(rng: random.Random, spec_ids: Sequence[str]):
+def _candidate_stream(rng: random.Random, spec_ids: Sequence[str],
+                      max_attempts: int = 200000):
     """Deterministically yield candidate ``(spec, start_state, witness)``.
 
     Family (a): a PROPER prefix of the spec's canonical build word.
     Family (b): a FRESH random intermediate stack: one or two random legal
     build/combine filler actions, then a random canonical prefix; the canonical
     suffix is replayed to PROVE the start state is solvable before it is kept.
+
+    The random family is bounded by ``max_attempts`` so an exhausted candidate
+    space terminates instead of looping forever.
     """
     infos = []
     for spec_id in spec_ids:
@@ -376,7 +396,7 @@ def _candidate_stream(rng: random.Random, spec_ids: Sequence[str]):
     if not infos:
         return
     yield from _prefix_candidates(infos)
-    while True:
+    for _attempt in range(int(max_attempts)):
         spec, word, states = infos[rng.randrange(len(infos))]
         env = DynamicEnv(spec)
         state = env.reset()

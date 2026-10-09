@@ -81,6 +81,18 @@ class EvoConfig:
     seed: int = 7
     checkpoint_dir: str = "checkpoints"
     history_dir: str = "history"
+    # task 4344: selection by mean solve rate + held-out validation term +
+    # legal-action masking. Defaults preserve Unit B / Unit D behaviour exactly
+    # (selection_episodes=0 and val_weight=0.0 turn the new machinery off).
+    selection_episodes: int = 0
+    selection_seed: int = 20261010
+    selection_epsilon: float = 0.1
+    solved_rate_weight: float = 0.5
+    val_weight: float = 0.0
+    val_batch: int = 16
+    val_seed: int = 20261010
+    val_pool_size: int = 64
+    mask_illegal: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -117,6 +129,14 @@ class Agent:
     subagents_spawned: int = 0
     alive: bool = True
     scripted_keys: Optional[Tuple[str, ...]] = None
+    # task 4344 selection/monitoring fields (filled when selection_episodes > 0)
+    fitness_base: float = float("-inf")
+    sel_solved_rate: float = 0.0
+    sel_mean_steps: Optional[float] = None
+    sel_std_steps: float = 0.0
+    sel_episode_seeds: Tuple[int, ...] = ()
+    val_solved_rate: float = 0.0
+    val_total: int = 0
 
     def genome_json(self) -> Dict[str, Any]:
         return {
@@ -127,6 +147,15 @@ class Agent:
             "depth": self.depth,
             "mutation_magnitude": round(self.mutation_magnitude, 6),
             "fitness": None if self.fitness == float("-inf") else round(self.fitness, 6),
+            "fitness_base": (None if self.fitness_base == float("-inf")
+                             else round(self.fitness_base, 6)),
+            "sel_solved_rate": round(self.sel_solved_rate, 6),
+            "sel_mean_steps": (None if self.sel_mean_steps is None
+                               else round(self.sel_mean_steps, 6)),
+            "sel_std_steps": round(self.sel_std_steps, 6),
+            "sel_episode_seeds": list(self.sel_episode_seeds),
+            "val_solved_rate": round(self.val_solved_rate, 6),
+            "val_total": int(self.val_total),
             "budget": round(self.budget, 6),
             "solved": self.solved,
             "total_steps": self.total_steps,
@@ -401,9 +430,68 @@ class EvolutionTrainer:
                 agent.fitness = (episode.total_return if agent.fitness == float("-inf")
                                  else max(agent.fitness, episode.total_return))
                 self.generation_subagents.extend(episode.subagents)
+            if self.config.selection_episodes > 0:
+                self._evaluate_selection(agent, generation)
+
+    def _evaluate_selection(self, agent: Agent, generation: int) -> None:
+        """Fix 1 + Fix 2: mean-solve-rate selection data and the AFTER fitness.
+
+        ``shaped_return`` is the training episode's best total return (the
+        BEFORE fitness). The candidate then runs ``selection_episodes`` fresh
+        epsilon-greedy episodes with explicit per-episode seeds, and (when
+        ``val_weight`` is set) one greedy pass over the deterministic
+        per-generation held-out batch. The recorded fitness is
+        ``shaped_return + solved_rate_weight*mean_solved_rate
+        + val_weight*val_solved_rate``.
+        """
+        from . import size_selection as sel
+
+        base = agent.fitness if agent.fitness != float("-inf") else 0.0
+        agent.fitness_base = base
+        report = sel.evaluate_candidate(
+            self.net, agent.genome, self.spec, generation,
+            episodes=self.config.selection_episodes,
+            selection_seed=self.config.selection_seed,
+            epsilon=self.config.selection_epsilon,
+            mask_illegal=self.config.mask_illegal,
+            root_mask=self.root_mask,
+            max_steps=self.config.max_episode_steps,
+        )
+        agent.sel_solved_rate = report["mean_solve_rate"]
+        agent.sel_mean_steps = report["mean_steps"]
+        agent.sel_std_steps = report["std_steps"]
+        agent.sel_episode_seeds = tuple(report["episode_seeds"])
+        val_rate = 0.0
+        val_total = 0
+        if self.config.val_weight:
+            val_rate, val_total, _names = sel.evaluate_validation(
+                self.net, agent.genome, self.config, generation,
+                root_mask=self.root_mask)
+        agent.val_solved_rate = val_rate
+        agent.val_total = val_total
+        agent.fitness = (base
+                         + self.config.solved_rate_weight * agent.sel_solved_rate
+                         + self.config.val_weight * agent.val_solved_rate)
+
+    def _rank_key(self, agent: Agent):
+        """The selection key (for ``max``); higher is better.
+
+        Fix 1 mandate: highest MEAN solve rate, then lower mean solved steps,
+        then lower step variance, then higher fitness, higher budget, agent id.
+        The default path (selection off) is exactly Unit B's key.
+        """
+        if self.config.selection_episodes > 0:
+            mean_steps = (agent.sel_mean_steps if agent.sel_mean_steps is not None
+                          else 1e9)
+            return (agent.sel_solved_rate, -mean_steps, -agent.sel_std_steps,
+                    agent.fitness, agent.budget, agent.aid)
+        return (agent.fitness, agent.budget, agent.aid)
 
     def _reproduce(self, population: List[Agent], generation: int) -> List[Dict[str, Any]]:
-        ranked = sorted(population, key=lambda a: (-a.fitness, -a.budget, a.aid))
+        if self.config.selection_episodes > 0:
+            ranked = sorted(population, key=self._rank_key, reverse=True)
+        else:
+            ranked = sorted(population, key=lambda a: (-a.fitness, -a.budget, a.aid))
         elite_count = max(1, int(round(len(population) * self.config.elite_frac)))
         elites = ranked[:elite_count]
         pool_size = max(2, int(math.ceil(len(population) * self.config.parent_frac)))
@@ -497,7 +585,7 @@ class EvolutionTrainer:
     # -- history / persistence --------------------------------------------
     def _generation_record(self, generation: int, population: List[Agent],
                            births: List[Dict[str, Any]]) -> Dict[str, Any]:
-        best = max(population, key=lambda a: (a.fitness, a.budget))
+        best = max(population, key=self._rank_key)
         mean = sum(a.fitness for a in population) / max(1, len(population))
         record = {
             "generation": generation,
@@ -506,6 +594,16 @@ class EvolutionTrainer:
             "best_fitness": round(best.fitness, 6),
             "best_budget": round(best.budget, 6),
             "best_steps": best.steps_gen,
+            "best_sel_solved_rate": round(best.sel_solved_rate, 6),
+            "best_sel_mean_steps": (None if best.sel_mean_steps is None
+                                    else round(best.sel_mean_steps, 6)),
+            "best_sel_std_steps": round(best.sel_std_steps, 6),
+            "best_val_solved_rate": round(best.val_solved_rate, 6),
+            "best_val_total": int(best.val_total),
+            "selection_episodes": int(self.config.selection_episodes),
+            "val_weight": float(self.config.val_weight),
+            "solved_rate_weight": float(self.config.solved_rate_weight),
+            "mask_illegal": bool(self.config.mask_illegal),
             "mean_fitness": round(mean, 6),
             "solved": sum(a.solved_gen for a in population),
             "births": births,
@@ -518,6 +616,14 @@ class EvolutionTrainer:
                     "origin": a.origin,
                     "parents": " + ".join(a.parents),
                     "fitness": round(a.fitness, 6),
+                    "fitness_base": (None if a.fitness_base == float("-inf")
+                                     else round(a.fitness_base, 6)),
+                    "sel_solved_rate": round(a.sel_solved_rate, 6),
+                    "sel_mean_steps": (None if a.sel_mean_steps is None
+                                       else round(a.sel_mean_steps, 6)),
+                    "sel_std_steps": round(a.sel_std_steps, 6),
+                    "val_solved_rate": round(a.val_solved_rate, 6),
+                    "val_total": int(a.val_total),
                     "budget": round(a.budget, 6),
                     "steps": a.steps_gen,
                     "total_steps": a.total_steps,
@@ -581,7 +687,9 @@ class EvolutionTrainer:
 
     def _append_agent_rows(self, history_dir: str, record: Dict[str, Any]) -> None:
         path = os.path.join(history_dir, "history.csv")
-        header = ["generation", "agent_id", "origin", "parents", "fitness", "budget",
+        header = ["generation", "agent_id", "origin", "parents", "fitness",
+                  "fitness_base", "sel_solved_rate", "sel_mean_steps",
+                  "sel_std_steps", "val_solved_rate", "val_total", "budget",
                   "steps", "total_steps", "solved", "depth", "mutation_magnitude",
                   "alive", "note"]
         write_header = not os.path.exists(path)
@@ -595,8 +703,9 @@ class EvolutionTrainer:
     def _append_trajectory_row(self, history_dir: str, record: Dict[str, Any]) -> None:
         path = os.path.join(history_dir, "reward_trajectory.csv")
         header = ["generation", "population", "best_agent", "best_fitness",
-                  "mean_fitness", "solved", "best_steps", "births", "deaths",
-                  "subagents"]
+                  "mean_fitness", "solved", "best_steps", "best_sel_solved_rate",
+                  "best_sel_mean_steps", "best_sel_std_steps",
+                  "best_val_solved_rate", "births", "deaths", "subagents"]
         row = {
             "generation": record["generation"],
             "population": record["population"],
@@ -605,6 +714,10 @@ class EvolutionTrainer:
             "mean_fitness": record["mean_fitness"],
             "solved": record["solved"],
             "best_steps": record["best_steps"],
+            "best_sel_solved_rate": record["best_sel_solved_rate"],
+            "best_sel_mean_steps": record["best_sel_mean_steps"],
+            "best_sel_std_steps": record["best_sel_std_steps"],
+            "best_val_solved_rate": record["best_val_solved_rate"],
             "births": len(record["births"]),
             "deaths": len(record["deaths"]),
             "subagents": len(record["subagents"]),

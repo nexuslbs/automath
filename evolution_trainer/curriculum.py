@@ -187,12 +187,20 @@ class CurriculumTrainer(EvolutionTrainer):
 
 
 def best_agent(trainer: EvolutionTrainer) -> Agent:
+    """The generation's best agent by the trainer's own rank key.
+
+    With ``selection_episodes > 0`` this is the MEAN-solve-rate rank (task
+    4344); otherwise it is exactly Unit B's ``(fitness, budget)`` key.
+    """
+    if getattr(trainer.config, "selection_episodes", 0) > 0:
+        return max(trainer.population, key=trainer._rank_key)
     return max(trainer.population, key=lambda a: (a.fitness, a.budget))
 
 
 def _config(generations: int, population: int, seed: int, step_cost: float,
             subagent_depth: int, checkpoint_dir: str, history_dir: str,
-            max_episode_steps: Optional[int]) -> EvoConfig:
+            max_episode_steps: Optional[int],
+            selection: Optional[Dict[str, Any]] = None) -> EvoConfig:
     return EvoConfig(
         population_size=population,
         generations=generations,
@@ -203,6 +211,7 @@ def _config(generations: int, population: int, seed: int, step_cost: float,
         checkpoint_dir=checkpoint_dir,
         history_dir=history_dir,
         max_episode_steps=max_episode_steps,
+        **(selection or {}),
     )
 
 
@@ -210,11 +219,12 @@ def run_evolution(spec: Spec, tag: str, out_dir: str, generations: int = 12,
                   population: int = 10, seed: int = 7, step_cost: float = 0.05,
                   subagent_depth: int = 1, strict_keys: Optional[Sequence[str]] = None,
                   gate: Optional[Callable] = None,
-                  max_episode_steps: Optional[int] = None) -> Dict[str, Any]:
+                  max_episode_steps: Optional[int] = None,
+                  selection: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     ckpt = os.path.join(out_dir, tag, "checkpoints")
     hist = os.path.join(out_dir, tag, "history")
     config = _config(generations, population, seed, step_cost, subagent_depth,
-                     ckpt, hist, max_episode_steps)
+                     ckpt, hist, max_episode_steps, selection=selection)
     trainer = CurriculumTrainer(spec, config, spec_id=spec.spec_id,
                                 strict_keys=strict_keys, gate=gate)
     start = time.perf_counter()
@@ -232,6 +242,12 @@ def run_evolution(spec: Spec, tag: str, out_dir: str, generations: int = 12,
         "max_episode_steps": max_episode_steps,
         "elapsed_s": round(elapsed, 6),
         "best_fitness": round(best.fitness, 6),
+        "best_fitness_base": (None if best.fitness_base == float("-inf")
+                              else round(best.fitness_base, 6)),
+        "best_sel_solved_rate": round(best.sel_solved_rate, 6),
+        "best_sel_mean_steps": (None if best.sel_mean_steps is None
+                                else round(best.sel_mean_steps, 6)),
+        "best_val_solved_rate": round(best.val_solved_rate, 6),
         "best_budget": round(best.budget, 6),
         "best_steps": best.steps_gen,
         "solved_generations": [r["solved"] for r in history],
@@ -421,13 +437,14 @@ class EarlyStop:
 def stage_s4(spec_id: str, out_dir: str, generations: int = 1500,
              population: int = 12, seed: int = 7, step_cost: float = 0.10,
              subagent_depth: int = 2, stop_after_plateau: bool = True,
-             plateau_checkpoints: int = 5) -> Dict[str, Any]:
+             plateau_checkpoints: int = 5,
+             selection: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     spec = load_spec(spec_path(spec_id))
     plan = minimal_and_max(spec)
     ckpt = os.path.join(out_dir, "checkpoints")
     hist = os.path.join(out_dir, "history")
     config = _config(generations, population, seed, step_cost, subagent_depth,
-                     ckpt, hist, plan["max_steps"])
+                     ckpt, hist, plan["max_steps"], selection=selection)
     trainer = CurriculumTrainer(spec, config, spec_id=spec_id)
     stop = EarlyStop(plateau_checkpoints=plateau_checkpoints, check_every=25)
     start = time.perf_counter()
@@ -453,6 +470,13 @@ def stage_s4(spec_id: str, out_dir: str, generations: int = 1500,
         "max_episode_steps": plan["max_steps"],
         "elapsed_s": round(elapsed, 6),
         "best_fitness": round(best.fitness, 6),
+        "best_fitness_base": (None if best.fitness_base == float("-inf")
+                              else round(best.fitness_base, 6)),
+        "best_sel_solved_rate": round(best.sel_solved_rate, 6),
+        "best_sel_mean_steps": (None if best.sel_mean_steps is None
+                                else round(best.sel_mean_steps, 6)),
+        "best_val_solved_rate": round(best.val_solved_rate, 6),
+        "selection": selection or {},
         "best_steps": best.steps_gen,
         "best_genome": best.genome,
         "snapshots": stop.snapshots,
@@ -473,7 +497,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--step-cost", type=float, default=0.10)
     parser.add_argument("--no-early-stop", action="store_true")
+    # task 4344: mean-solve-rate selection + held-out validation + masking.
+    # All default OFF, so the pipeline is behaviour-identical when unused.
+    parser.add_argument("--selection-episodes", type=int, default=0)
+    parser.add_argument("--selection-seed", type=int, default=20261010)
+    parser.add_argument("--selection-epsilon", type=float, default=0.1)
+    parser.add_argument("--solved-rate-weight", type=float, default=0.5)
+    parser.add_argument("--val-weight", type=float, default=0.0)
+    parser.add_argument("--val-batch", type=int, default=16)
+    parser.add_argument("--val-seed", type=int, default=20261010)
+    parser.add_argument("--val-pool-size", type=int, default=64)
+    parser.add_argument("--mask-illegal", action="store_true")
     args = parser.parse_args(argv)
+
+    selection: Optional[Dict[str, Any]] = None
+    if args.selection_episodes > 0 or args.val_weight > 0.0 or args.mask_illegal:
+        selection = {
+            "selection_episodes": args.selection_episodes,
+            "selection_seed": args.selection_seed,
+            "selection_epsilon": args.selection_epsilon,
+            "solved_rate_weight": args.solved_rate_weight,
+            "val_weight": args.val_weight,
+            "val_batch": args.val_batch,
+            "val_seed": args.val_seed,
+            "val_pool_size": args.val_pool_size,
+            "mask_illegal": args.mask_illegal,
+        }
 
     os.makedirs(args.out, exist_ok=True)
     stages = ["s1", "s2", "s3"] if args.stage == "all" else [args.stage]
@@ -490,7 +539,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             payload = stage_s4(args.spec, args.out, generations=args.generations,
                                population=args.population, seed=args.seed,
                                step_cost=args.step_cost,
-                               stop_after_plateau=not args.no_early_stop)
+                               stop_after_plateau=not args.no_early_stop,
+                               selection=selection)
         payload["stage_wall_s"] = round(time.perf_counter() - started, 6)
         results[stage] = payload
         write_json(os.path.join(args.out, "%s_summary.json" % stage), payload)

@@ -38,8 +38,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from dynamic_env.engine import Action, DynamicEnv, State
 from dynamic_env.spec import Spec
 
-from .features import ActionFeaturizer, objective_ids, state_dim, state_features
-from .genome import PolicyNet, mix_genomes, mutate_genome, round_genome
+from .features import ActionFeaturizer, objective_ids
+from .genome import mix_genomes, mutate_genome, round_genome
+from .size_invariant import SizeInvariantNet
 
 
 # --------------------------------------------------------------------------
@@ -157,8 +158,8 @@ class EvolutionTrainer:
         self.config = config or EvoConfig()
         self.rng = random.Random(self.config.seed)
         self.featurizer = ActionFeaturizer(spec)
-        self.in_dim = state_dim(spec) + self.featurizer.dim
-        self.net = PolicyNet(self.in_dim, self.config.hidden)
+        self.net = SizeInvariantNet(self.config.hidden)
+        self.in_dim = self.net.size
         self.obj_ids = objective_ids(spec)
         self.target = tuple(int(spec.objectives[oid]) for oid in self.obj_ids)
         self.root_mask = tuple(1 for _ in self.obj_ids)
@@ -187,12 +188,9 @@ class EvolutionTrainer:
     # -- action choice -----------------------------------------------------
     def _logits(self, agent: Agent, env: DynamicEnv, state: State,
                 actions: Sequence[Action], subgoal_mask: Sequence[int]) -> List[float]:
-        base = state_features(env, state, subgoal_mask)
-        out: List[float] = []
-        for action in actions:
-            x = base + self.featurizer.featurize(state, action)
-            out.append(self.net.forward(agent.genome, x))
-        return out
+        # The size-invariant genome encodes the node graph ONCE per state and
+        # then scores each legal action; no spec-sized input vector is built.
+        return self.net.logits(agent.genome, env, state, actions, subgoal_mask)
 
     def _choose(self, agent: Agent, env: DynamicEnv, state: State,
                 actions: Sequence[Action], subgoal_mask: Sequence[int],

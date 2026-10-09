@@ -382,31 +382,40 @@ def stage_s3(out_dir: str, seed: int = 7) -> Dict[str, Any]:
 
 @dataclass
 class EarlyStop:
-    """Checkpoint-based stop: solved at least once and no improvement in a while."""
+    """Checkpoint-based stop: a solve was seen and no improvement for a while.
+
+    Before the FIRST solved episode the run NEVER stops early (it is the long
+    stage-4 run); after a solve is observed, ``plateau_checkpoints`` consecutive
+    checkpoints with no improvement stop it.
+    """
 
     plateau_checkpoints: int = 5
     check_every: int = 25
     _best: float = float("-inf")
     _since: int = 0
+    _seen_solve: bool = False
     snapshots: List[Dict[str, Any]] = field(default_factory=list)
 
     def __call__(self, generation: int, record: Dict[str, Any]) -> bool:
         if generation % self.check_every != 0:
             return False
         fitness = float(record["best_fitness"])
+        if record.get("solved", 0) > 0:
+            self._seen_solve = True
         if fitness > self._best + 1e-9:
             self._best = fitness
             self._since = 0
-        else:
+        elif self._seen_solve:
             self._since += 1
         self.snapshots.append({
             "generation": generation,
             "best_fitness": round(fitness, 6),
             "best_steps": record.get("best_steps"),
             "solved": record.get("solved"),
+            "seen_solve": self._seen_solve,
             "plateau_checkpoints": self._since,
         })
-        return self._since >= self.plateau_checkpoints
+        return self._seen_solve and self._since >= self.plateau_checkpoints
 
 
 def stage_s4(spec_id: str, out_dir: str, generations: int = 1500,

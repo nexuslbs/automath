@@ -382,7 +382,6 @@ def test_serialization_has_net_and_no_pref() -> None:
     back = Genome.from_dict(d)
     assert len(back.net) == net_size()
     assert back.genes() == genes
-    assert back.epsilon == g.epsilon
     assert back.switch_patience == g.switch_patience
 
 

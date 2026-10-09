@@ -65,6 +65,7 @@ class EvoConfig:
     top_k: int = 4
     mutation_rate: float = 0.25
     mutation_sigma: float = 0.15
+    alpha: float = 0.5
     sigma_pref: float = 0.5
     sigma_state: float = 0.5
     pref_clip: float = 5.0

@@ -139,17 +139,22 @@ def check_subgoal_bonus() -> str:
         raise CheckFailure("subgoal_bonus",
                            "expected +%.2f bonus, got %.6f" % (SUBGOAL_BONUS,
                                                                rb.bonus))
-    # the goal step itself is NOT a proper sub-goal (it earns the +1.0)
+    # the goal step itself is NOT a proper sub-goal (it earns the +1.0);
+    # intermediate sub-structures (e.g. sub(3,1)) legitimately DO earn a bonus.
     state = nxt
+    final_rb = None
     for a in ("PushOne", "MakeChange", "MakeChange", "PushOne", "MakeSub",
               "MakeMul"):
         nxt = env.step(state, a)
-        rb2 = shaper.reward(target, state, nxt, True)
-        if rb2.subgoal:
-            raise CheckFailure("subgoal_bonus", "goal step flagged as subgoal")
+        final_rb = shaper.reward(target, state, nxt, True)
         state = nxt
-    return ("proper sub-structure %s -> bonus=+%.2f (top==target excluded)"
-            % (top.canonical(), rb.bonus))
+    assert final_rb is not None
+    if final_rb.subgoal or abs(final_rb.bonus) > 1e-12:
+        raise CheckFailure("subgoal_bonus", "goal step flagged as subgoal")
+    if abs(final_rb.final - GOAL_REWARD) > 1e-12:
+        raise CheckFailure("subgoal_bonus", "goal step missing +1.0")
+    return ("proper sub-structure %s -> bonus=+%.2f (top==target excluded; "
+            "goal final=+%.2f)" % (top.canonical(), rb.bonus, final_rb.final))
 
 
 def check_no_artificial_reward_nodes() -> str:

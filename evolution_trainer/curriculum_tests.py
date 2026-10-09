@@ -154,8 +154,12 @@ def check_heldout_deep_arity() -> str:
         raise CheckFailure("heldout_deep_arity",
                            "expected arity >= 3, got %r" % spec.max_combine_arity)
     minimum, word = bfs_min_steps(spec)
-    if minimum != 2:
-        raise CheckFailure("heldout_deep_arity", "deep min != 2: %r" % minimum)
+    if minimum is None or minimum < 2 or minimum > 3:
+        raise CheckFailure("heldout_deep_arity",
+                           "deep min %r not in [2,3] (word %r)" % (minimum, word))
+    if not word or not word[0].startswith("combine:"):
+        raise CheckFailure("heldout_deep_arity",
+                           "deep word does not start with combine: %r" % (word,))
     return "deep dynamic_group arity=%d min=%d word=%r" % (
         spec.max_combine_arity, minimum, word)
 

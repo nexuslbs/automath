@@ -60,6 +60,7 @@ from .evolution_semi import (
     evo_validation_shaped,
     evolve_one_generation_shaped,
 )
+from .curriculum import CurriculumSchedule
 
 _STOP = False
 _STARTED_AT = time.time()
@@ -130,7 +131,8 @@ def bucket_curve(history: Sequence[dict], buckets: int = 12) -> List[dict]:
 
 def write_snapshot(cfg: EvoConfig, gen: int, population: List[Genome],
                    best: Genome, mean_fitness: float, history: Sequence[dict],
-                   label: str = "", validation: Optional[dict] = None) -> str:
+                   label: str = "", validation: Optional[dict] = None,
+                   phase: int = -1) -> str:
     os.makedirs(cfg.progress_dir, exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     path = os.path.join(
@@ -165,6 +167,8 @@ def write_snapshot(cfg: EvoConfig, gen: int, population: List[Genome],
         },
         "curve": bucket_curve(history),
     }
+    if phase >= 0:
+        payload["curriculum_phase"] = int(phase)
     if validation is not None:
         payload["validation"] = validation
     atomic_write_json(path, payload)
@@ -241,6 +245,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     rcfg = RewardConfig(step_cost=cfg.step_cost, gamma=cfg.reward_gamma,
                         subgoal_bonus=cfg.subgoal_bonus,
                         shaping_cap=cfg.shaping_cap)
+    # Flavor B: when the config carries a curriculum block the per-generation
+    # training bundle is sampled from the CURRENT phase's dense-case tier(s).
+    # Everything else (genome, reward, fitness formula) stays flavor A.
+    schedule = CurriculumSchedule.from_config(cfg.curriculum, cfg.seed)
     emit("START config=%s population=%d episodes=%d total_budget=%d "
          "generations=%d wall_clock_hours=%.2f plateau_generations=%d "
          "validation_every=%d validation_ext_every=%d bundle=%s"
@@ -248,6 +256,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             cfg.generations, cfg.wall_clock_hours, cfg.plateau_generations,
             cfg.validation_every, cfg.validation_ext_every,
             bundle.fingerprint()[:16]))
+    if schedule is not None:
+        emit("CURRICULUM rule=%s %s" % (schedule.rule, schedule.describe()))
 
     ck_path = os.path.join(cfg.checkpoint_dir, "checkpoint.json")
     rng = random.Random(cfg.seed)
@@ -272,14 +282,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     last_snap_time = time.time()
     last_snap_gen = start_gen
     exit_code = 0
+    active_bundle = bundle
+    active_phase = -1
     emit("LOOP begin generation=%d deadline=%s"
          % (gen, time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                time.gmtime(deadline))))
 
     while not _STOP and gen < cfg.generations and time.time() < deadline:
         try:
+            train_bundle = bundle
+            if schedule is not None:
+                active_phase = schedule.phase_index(gen)
+                train_bundle = schedule.bundle_for(gen, cfg.total_budget)
+            active_bundle = train_bundle
             population, record = evolve_one_generation_shaped(
-                population, gen, bundle, cfg, rng, cfg.seed, rcfg)
+                population, gen, train_bundle, cfg, rng, cfg.seed, rcfg)
             gen += 1
             history.append(record)
             append_history_jsonl(cfg, record)
@@ -301,14 +318,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             else:
                 gens_since_improve += 1
             if cfg.checkpoint_every and gen % cfg.checkpoint_every == 0:
-                save_generation(cfg, gen, population, history, bundle, best)
-            emit("GEN gen=%d best=%.4f shaped=%.4f mean=%.4f solved=%d/%d "
-                 "steps=%d plateau=%d best_gid=%s pool=%d"
-                 % (gen, best.fitness,
+                save_generation(cfg, gen, population, history, active_bundle,
+                                best)
+            solved_rate = (best.solved_feasible
+                           / max(1, len(train_bundle.feasible())))
+            emit("GEN gen=%d phase=%d best=%.4f shaped=%.4f mean=%.4f "
+                 "solved=%d/%d rate=%.2f steps=%d plateau=%d best_gid=%s "
+                 "pool=%d"
+                 % (gen, active_phase, best.fitness,
                     best._result.shaped_return if best._result else 0.0,
                     mean_fitness, best.solved_feasible,
-                    len(bundle.feasible()), best.steps, gens_since_improve,
-                    best.gid, len(record["pool"])))
+                    len(train_bundle.feasible()), solved_rate, best.steps,
+                    gens_since_improve, best.gid, len(record["pool"])))
             now = time.time()
             milestone = (gen % cfg.validation_every == 0)
             due = (milestone
@@ -319,10 +340,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 if milestone:
                     do_ext = (not args.no_ext
                               and gen % cfg.validation_ext_every == 0)
-                    validation = run_validation(cfg, gen, best, bundle, do_ext)
+                    validation = run_validation(cfg, gen, best, active_bundle,
+                                                do_ext)
                 write_snapshot(cfg, gen, population, best, mean_fitness,
                                history, label="milestone" if milestone else "",
-                               validation=validation)
+                               validation=validation, phase=active_phase)
                 last_snap_time = now
                 last_snap_gen = gen
             if gens_since_improve >= cfg.plateau_generations:
@@ -335,10 +357,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     elapsed = time.time() - _STARTED_AT
     try:
-        save_generation(cfg, gen, population, history, bundle, best)
+        save_generation(cfg, gen, population, history, active_bundle, best)
         write_snapshot(cfg, gen, population, best,
                        (sum(g.fitness for g in population) / len(population)),
-                       history, label="final")
+                       history, label="final", phase=active_phase)
     except Exception as exc:  # noqa: BLE001
         emit("FINAL_SAVE_ERROR %s" % exc)
         exit_code = 3
@@ -346,8 +368,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               ("plateau" if gens_since_improve >= cfg.plateau_generations else
                ("generation_cap" if gen >= cfg.generations else
                 ("wall_clock" if time.time() >= deadline else "stopped"))))
-    emit("STOP reason=%s generation=%d elapsed=%.1fs best=%.4f exit=%d"
-         % (reason, gen, elapsed, best.fitness, exit_code))
+    emit("STOP reason=%s generation=%d phase=%d elapsed=%.1fs best=%.4f "
+         "exit=%d"
+         % (reason, gen, active_phase, elapsed, best.fitness, exit_code))
     return exit_code
 
 

@@ -117,6 +117,12 @@ class EvoConfig:
     validation_every: int = 100
     validation_ext_every: int = 500
     validation_episodes: int = 300
+    # -- Flavor B (task 4333): difficulty curriculum -----------------------
+    # When non-empty ({"enabled": true, "phases": [...], ...}) the loop samples
+    # its per-generation training bundle from the CURRENT phase's dense-case
+    # tier(s).  The policy, reward and fitness formula are unchanged; an empty
+    # dict reproduces flavor A exactly.
+    curriculum: Dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)

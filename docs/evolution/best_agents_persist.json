@@ -61,7 +61,94 @@
         "switch_patience": 3
       },
       "loaded_gid": "g00007-c011",
-      "per_state": null,
+      "per_state": [
+        {
+          "feasible": true,
+          "name": "not(0)",
+          "partial": 1.0,
+          "reward": 0.9,
+          "sid": "s0",
+          "solved": true,
+          "started": true,
+          "status": "solved",
+          "steps": 2,
+          "switches_away": 0
+        },
+        {
+          "feasible": true,
+          "name": "add(1,1)",
+          "partial": 1.0,
+          "reward": 0.8487,
+          "sid": "s1",
+          "solved": true,
+          "started": true,
+          "status": "solved",
+          "steps": 3,
+          "switches_away": 0
+        },
+        {
+          "feasible": true,
+          "name": "mul(1,3)",
+          "partial": 1.0,
+          "reward": -0.48,
+          "sid": "s2",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 9,
+          "switches_away": 1
+        },
+        {
+          "feasible": true,
+          "name": "if(lt(1,2),1,0)",
+          "partial": 0.9,
+          "reward": -0.9503,
+          "sid": "s3",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 19,
+          "switches_away": 1
+        },
+        {
+          "feasible": false,
+          "name": "impossible_tag99",
+          "partial": 0.412,
+          "reward": -1.9001,
+          "sid": "s4",
+          "solved": false,
+          "started": true,
+          "status": "impossible-skipped",
+          "steps": 38,
+          "switches_away": 2
+        },
+        {
+          "feasible": true,
+          "name": "div(mul(3,3),3)",
+          "partial": 0.357,
+          "reward": -0.2,
+          "sid": "s5",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 4,
+          "switches_away": 1
+        },
+        {
+          "feasible": false,
+          "name": "impossible_seq5",
+          "partial": 1.0,
+          "reward": 0.0859,
+          "sid": "s6",
+          "solved": false,
+          "started": true,
+          "status": "impossible-skipped",
+          "steps": 15,
+          "switches_away": 2
+        }
+      ],
+      "per_state_gid": "g00007-c011",
+      "per_state_source": "/opt/automath/tmp/semi-evo/checkpoints/state_results.json",
       "pref": [
         0.594948,
         -0.457133,
@@ -162,7 +249,94 @@
         "switch_patience": 9
       },
       "loaded_gid": "g00006-c005",
-      "per_state": null,
+      "per_state": [
+        {
+          "feasible": true,
+          "name": "not(0)",
+          "partial": 1.0,
+          "reward": 0.9,
+          "sid": "s0",
+          "solved": true,
+          "started": true,
+          "status": "solved",
+          "steps": 2,
+          "switches_away": 0
+        },
+        {
+          "feasible": true,
+          "name": "add(1,1)",
+          "partial": 1.0,
+          "reward": 0.85,
+          "sid": "s1",
+          "solved": true,
+          "started": true,
+          "status": "solved",
+          "steps": 3,
+          "switches_away": 0
+        },
+        {
+          "feasible": true,
+          "name": "mul(1,3)",
+          "partial": 1.0,
+          "reward": -0.3,
+          "sid": "s2",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 6,
+          "switches_away": 1
+        },
+        {
+          "feasible": true,
+          "name": "if(lt(1,2),1,0)",
+          "partial": 1.0,
+          "reward": -1.1,
+          "sid": "s3",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 22,
+          "switches_away": 2
+        },
+        {
+          "feasible": false,
+          "name": "impossible_tag99",
+          "partial": 0.578,
+          "reward": -1.3,
+          "sid": "s4",
+          "solved": false,
+          "started": true,
+          "status": "impossible-skipped",
+          "steps": 26,
+          "switches_away": 1
+        },
+        {
+          "feasible": true,
+          "name": "div(mul(3,3),3)",
+          "partial": 0.929,
+          "reward": -0.55,
+          "sid": "s5",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 11,
+          "switches_away": 1
+        },
+        {
+          "feasible": false,
+          "name": "impossible_seq5",
+          "partial": 1.0,
+          "reward": -1.0,
+          "sid": "s6",
+          "solved": false,
+          "started": true,
+          "status": "impossible-skipped",
+          "steps": 20,
+          "switches_away": 2
+        }
+      ],
+      "per_state_gid": "g00006-c005",
+      "per_state_source": "/opt/automath/tmp/pure-evo/checkpoints/state_results.json",
       "pref": [
         -0.27058,
         -0.15008,
@@ -268,7 +442,94 @@
         "switch_patience": 8
       },
       "loaded_gid": "g3-000219-c013",
-      "per_state": null,
+      "per_state": [
+        {
+          "feasible": true,
+          "name": "not(0)",
+          "partial": 1.0,
+          "reward": 1.3944,
+          "sid": "s0",
+          "solved": true,
+          "started": true,
+          "status": "solved",
+          "steps": 2,
+          "switches_away": 0
+        },
+        {
+          "feasible": true,
+          "name": "add(1,1)",
+          "partial": 1.0,
+          "reward": 0.8487,
+          "sid": "s1",
+          "solved": true,
+          "started": true,
+          "status": "solved",
+          "steps": 3,
+          "switches_away": 0
+        },
+        {
+          "feasible": true,
+          "name": "mul(1,3)",
+          "partial": 1.0,
+          "reward": -0.7315,
+          "sid": "s2",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 12,
+          "switches_away": 2
+        },
+        {
+          "feasible": true,
+          "name": "if(lt(1,2),1,0)",
+          "partial": 1.0,
+          "reward": -0.9348,
+          "sid": "s3",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 11,
+          "switches_away": 2
+        },
+        {
+          "feasible": false,
+          "name": "impossible_tag99",
+          "partial": 1.0,
+          "reward": -1.7044,
+          "sid": "s4",
+          "solved": false,
+          "started": true,
+          "status": "impossible-skipped",
+          "steps": 22,
+          "switches_away": 2
+        },
+        {
+          "feasible": true,
+          "name": "div(mul(3,3),3)",
+          "partial": 1.0,
+          "reward": -1.2204,
+          "sid": "s5",
+          "solved": false,
+          "started": true,
+          "status": "partial",
+          "steps": 22,
+          "switches_away": 3
+        },
+        {
+          "feasible": false,
+          "name": "impossible_seq5",
+          "partial": 1.0,
+          "reward": -1.0472,
+          "sid": "s6",
+          "solved": false,
+          "started": true,
+          "status": "impossible-skipped",
+          "steps": 18,
+          "switches_away": 2
+        }
+      ],
+      "per_state_gid": "g3-000200-c001",
+      "per_state_source": "/opt/automath/tmp/gen3/snapshot_20261009T135236Z_gen000200.json",
       "pref": [
         -2.946944,
         4.112716,
@@ -309,9 +570,9 @@
       "tag": "G3"
     }
   ],
-  "created_utc": "2026-10-09T14:10:57Z",
+  "created_utc": "2026-10-09T14:12:51Z",
   "description": "Best genome of each evolution loop, reusable as a seed.",
-  "note": "per_state is null when the loop checkpoint did not persist a per-state snapshot; only the G3 end-of-run snapshot carries it.",
+  "note": "per_state for A/B comes from each loop's state_results.json (the exact best_gid); G3 per_state comes from the last periodic snapshot and therefore describes that snapshot's best gid, recorded in per_state_gid.",
   "task": 4327,
   "unit": "E"
 }

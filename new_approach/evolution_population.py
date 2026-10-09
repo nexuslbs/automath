@@ -87,6 +87,13 @@ class EvoConfig:
     heartbeat_generations: int = 200
     wall_clock_hours: float = 24.0
     log_file: str = "/opt/automath/tmp/evolution/longrun.log"
+    # -- stall / plateau breaker -------------------------------------------
+    # When > 0, if the best fitness does not improve for this many
+    # generations, re-seed the NON-ELITE population from the best elite with
+    # fresh gaussian noise (KEEPING the elites unchanged).  0 disables it, so
+    # a config that omits these keys reproduces the original search exactly.
+    restart_on_stall: int = 0
+    restart_sigma: float = 0.5
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -326,6 +333,26 @@ def _seed_for(gid: str, seed_base: int) -> int:
     return seed_base + (zlib.crc32(gid.encode()) & 0x7FFFFFFF) % 1_000_000
 
 
+# Module-level plateau tracker (the loop is single-threaded).  It is consulted
+# ONLY when ``cfg.restart_on_stall > 0``: a config that leaves it 0 never
+# touches this dict and never consumes RNG here, so the original search is
+# reproduced byte-for-byte.
+_STALL: Dict[str, object] = {
+    "best_fitness": None,
+    "gens_since_best": 0,
+    "restarts": 0,
+}
+
+
+def _update_stall(best_fitness: float) -> None:
+    prev = _STALL["best_fitness"]
+    if prev is None or best_fitness > float(prev) + 1e-9:
+        _STALL["best_fitness"] = best_fitness
+        _STALL["gens_since_best"] = 0
+    else:
+        _STALL["gens_since_best"] = int(_STALL["gens_since_best"]) + 1
+
+
 def evolve_one_generation(population: List[Genome], gen: int, bundle: Bundle,
                           cfg: EvoConfig, rng: random.Random,
                           seed_base: int) -> Tuple[List[Genome], dict]:
@@ -351,11 +378,41 @@ def evolve_one_generation(population: List[Genome], gen: int, bundle: Bundle,
               for g in ranked[:cfg.elites]]
     offspring: List[Genome] = []
     need = max(0, cfg.population - len(elites))
-    while len(offspring) < need:
-        a, b = _pick_pair(rng, choosers, solvers, pool)
-        child = mutate(crossover(a, b, rng), rng, cfg)
-        child.gid = "g%05d-c%03d" % (gen + 1, len(offspring))
-        offspring.append(child)
+    restarted = False
+    if cfg.restart_on_stall and cfg.restart_on_stall > 0:
+        _update_stall(best.fitness)
+        if int(_STALL["gens_since_best"]) > cfg.restart_on_stall:
+            seed_parent = ranked[0]
+            for i in range(need):
+                child = clone_genome(seed_parent,
+                                     gid="g%05d-c%03d" % (gen + 1, i),
+                                     origin="restart")
+                for j in range(len(child.pref)):
+                    child.pref[j] = _clamp(
+                        child.pref[j] + rng.gauss(0.0, cfg.restart_sigma),
+                        -cfg.pref_clip, cfg.pref_clip)
+                for j in range(len(child.state_pref)):
+                    child.state_pref[j] = _clamp(
+                        child.state_pref[j]
+                        + rng.gauss(0.0, cfg.restart_sigma),
+                        -cfg.pref_clip, cfg.pref_clip)
+                child.epsilon = _clamp(
+                    seed_parent.epsilon + rng.gauss(0.0, 0.1),
+                    cfg.epsilon_min, cfg.epsilon_max)
+                child.switch_patience = int(_clamp(
+                    seed_parent.switch_patience + rng.choice((-1, 1)), 2, 20))
+                child.parents = (seed_parent.gid,)
+                child.cross_detail = {"restart_from": seed_parent.gid}
+                offspring.append(child)
+            _STALL["gens_since_best"] = 0
+            _STALL["restarts"] = int(_STALL["restarts"]) + 1
+            restarted = True
+    if not restarted:
+        while len(offspring) < need:
+            a, b = _pick_pair(rng, choosers, solvers, pool)
+            child = mutate(crossover(a, b, rng), rng, cfg)
+            child.gid = "g%05d-c%03d" % (gen + 1, len(offspring))
+            offspring.append(child)
 
     new_pop = elites + offspring
     record = {
@@ -364,6 +421,10 @@ def evolve_one_generation(population: List[Genome], gen: int, bundle: Bundle,
         "best_fitness": round(best.fitness, 6),
         "mean_fitness": round(mean_fitness, 6),
         "threshold": round(threshold, 6),
+        "restart": restarted,
+        "gens_since_best": int(_STALL["gens_since_best"])
+        if (cfg.restart_on_stall and cfg.restart_on_stall > 0) else 0,
+        "restarts_total": int(_STALL["restarts"]),
         "qualified": [g.gid for g in qualified],
         "choosers": [g.gid for g in choosers],
         "solvers": [g.gid for g in solvers],

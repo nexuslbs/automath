@@ -55,6 +55,12 @@ from .curriculum import (
     excluded_infeasible,
     tiered_cases,
 )
+from .memory import (
+    MemoryStore,
+    canonical_state_key,
+    hash_state_key,
+    memory_from_config,
+)
 from .nodes import Group, One, Zero, size
 from .target_features import (
     PolicyNet,
@@ -473,6 +479,186 @@ def check_curriculum_bundle_and_fitness() -> str:
                cfg.solved_rate_weight))
 
 
+def check_memory_cap_lru() -> str:
+    """A hard cap evicts the least-recently-used entry; lru=False is FIFO."""
+    stacks = [(), (One(),), (Zero(),), (nat(3),)]
+    m = MemoryStore(cap=3, lru=True)
+    for i, st in enumerate(stacks[:3]):
+        m.update(One(), st, "a%d" % i, float(i))
+    if len(m) != 3:
+        raise CheckFailure("memory_cap_lru", "cap not enforced: %d" % len(m))
+    # Touch entry 0 so it becomes most-recent, then overflow the cap.
+    if m.best_action(One(), stacks[0]) != "a0":
+        raise CheckFailure("memory_cap_lru", "lost entry 0")
+    m.update(One(), stacks[3], "a3", 3.0)
+    if m.evictions != 1 or len(m) != 3:
+        raise CheckFailure("memory_cap_lru",
+                           "evictions=%d entries=%d" % (m.evictions, len(m)))
+    if m.best_action(One(), stacks[1]) is not None:
+        raise CheckFailure("memory_cap_lru", "LRU victim kept")
+    if m.best_action(One(), stacks[0]) != "a0":
+        raise CheckFailure("memory_cap_lru", "recently used evicted")
+    # FIFO: a lookup must NOT refresh recency.
+    f = MemoryStore(cap=3, lru=False)
+    for i, st in enumerate(stacks[:3]):
+        f.update(One(), st, "a%d" % i, float(i))
+    if f.best_action(One(), stacks[0]) != "a0":
+        raise CheckFailure("memory_cap_lru", "fifo lost entry 0")
+    f.update(One(), stacks[3], "a3", 3.0)
+    if f.best_action(One(), stacks[0]) is not None:
+        raise CheckFailure("memory_cap_lru", "fifo did not evict oldest")
+    if f.best_action(One(), stacks[1]) != "a1":
+        raise CheckFailure("memory_cap_lru", "fifo evicted the wrong entry")
+    return ("lru cap=3 evicted=%d kept-recent; fifo evicted oldest"
+            % m.evictions)
+
+
+def check_memory_canonical_key_stability() -> str:
+    """The canonical (target, stack) key is stable and state-identifying."""
+    t = ev_add(One(), One())
+    st = (One(), Zero())
+    k1 = canonical_state_key(t, st)
+    k2 = canonical_state_key(t, st)
+    if k1 != k2:
+        raise CheckFailure("memory_canonical_key", "key not stable")
+    if t.canonical() not in k1 or One().canonical() not in k1:
+        raise CheckFailure("memory_canonical_key", "key omits structure")
+    if canonical_state_key(t, st) == canonical_state_key(t, (One(),)):
+        raise CheckFailure("memory_canonical_key", "stack ignored")
+    if canonical_state_key(t, st) == canonical_state_key(
+            ev_mul(One(), One()), st):
+        raise CheckFailure("memory_canonical_key", "target ignored")
+    m = MemoryStore(cap=10)
+    m.update(t, st, "PushOne", 1.0)
+    if m.best_action(t, (One(), Zero())) != "PushOne":
+        raise CheckFailure("memory_canonical_key", "equivalent state missed")
+    return "key stable len=%d; target+stack both identify the state" % len(k1)
+
+
+def check_memory_hash_keys() -> str:
+    """hash_keys=True stores an 8-byte digest and round-trips exactly."""
+    t = ev_add(One(), One())
+    st = (One(), Zero())
+    plain = MemoryStore(cap=10, hash_keys=False)
+    hashed = MemoryStore(cap=10, hash_keys=True)
+    for store in (plain, hashed):
+        store.update(t, st, "PushOne", 0.25)
+    kp = plain.key_for(t, st)
+    kh = hashed.key_for(t, st)
+    if not isinstance(kp, str) or not isinstance(kh, bytes) or len(kh) != 8:
+        raise CheckFailure("memory_hash_keys", "bad key types %r %r" % (kp, kh))
+    if kh != hash_state_key(kp):
+        raise CheckFailure("memory_hash_keys", "digest mismatch")
+    if hashed.best_action(t, st) != "PushOne":
+        raise CheckFailure("memory_hash_keys", "hash-mode lookup failed")
+    if hashed.score(t, st, "PushOne") != plain.score(t, st, "PushOne"):
+        raise CheckFailure("memory_hash_keys", "score differs from str mode")
+    return "hash key len=%d == blake2b8(canonical); round-trip ok" % len(kh)
+
+
+def check_memory_rollout_hook() -> str:
+    """The rollout calls the after-every-inference hook when memory is on."""
+    cfg = _cfg(memory={"enabled": True, "cap": 5000, "lru": True,
+                       "hash_keys": False, "alpha_mem": 1.0,
+                       "update_every_inference": True, "seed": SEED})
+    bundle = make_demo_bundle(cfg.total_budget)
+    rng = random.Random(SEED)
+    g = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg, "g-hook")
+    agent = make_shaped_agent(g, cfg, SEED)
+    if not agent.use_memory:
+        raise CheckFailure("memory_rollout_hook", "memory not built from config")
+    res = run_bundle_shaped(agent, bundle, None, total_budget=cfg.total_budget,
+                            training=True, epsilon=0.0)
+    if agent.memory is None or agent.memory.updates <= 0:
+        raise CheckFailure("memory_rollout_hook", "hook never fired")
+    if len(agent.memory) <= 0:
+        raise CheckFailure("memory_rollout_hook", "no entries stored")
+    return ("updates=%d entries=%d steps=%d"
+            % (agent.memory.updates, len(agent.memory), res.total_steps))
+
+
+def check_memory_update_changes_action() -> str:
+    """A remembered best action changes the next choice for that exact state."""
+    cfg = _cfg(memory={"enabled": True, "cap": 1000, "lru": True,
+                       "hash_keys": False, "alpha_mem": 100.0,
+                       "update_every_inference": True, "seed": SEED})
+    bundle = make_demo_bundle(cfg.total_budget)
+    s = bundle.by_id("s1")
+    rng = random.Random(SEED)
+    g = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg, "g-mem")
+    agent = make_shaped_agent(g, cfg, SEED)
+    env = EvoEnv(FixedStateGoal(s.target))
+    state = env.reset()
+    agent.set_target(s.target)
+    valid = list(agent.valid(state.stack))
+    before = agent.best_action(s.key(), state)
+    other = next(a for a in reversed(valid) if a != before)
+    if not agent.observe(s.key(), state, other, 1.0):
+        raise CheckFailure("memory_update_action", "observe rejected")
+    after = agent.best_action(s.key(), state)
+    if after != other or after == before:
+        raise CheckFailure("memory_update_action",
+                           "action unchanged: %s -> %s" % (before, after))
+    return ("visited %s: %s -> %s after memory update (alpha_mem=%.0f)"
+            % (s.target.canonical(), before, after, agent.alpha_mem))
+
+
+def check_memory_zero_alpha_matches_flavor_a() -> str:
+    """alpha_mem=0.0 with memory enabled reproduces flavor A exactly."""
+    bundle = make_demo_bundle(20)
+    rng = random.Random(SEED)
+    cfg_off = _cfg()
+    g = random_genome(rng, len(EVO_ORDER), len(bundle.states), cfg_off, "g-a")
+    a_off = make_shaped_agent(g, cfg_off, SEED)
+    r_off = run_bundle_shaped(a_off, bundle, None, total_budget=20,
+                              training=True, epsilon=0.0)
+    cfg_mem = _cfg(memory={"enabled": True, "cap": 100000, "lru": True,
+                           "hash_keys": False, "alpha_mem": 0.0,
+                           "update_every_inference": True, "seed": SEED})
+    a_mem = make_shaped_agent(g, cfg_mem, SEED)
+    if not a_mem.use_memory:
+        raise CheckFailure("memory_zero_alpha", "memory not enabled")
+    r_mem = run_bundle_shaped(a_mem, bundle, None, total_budget=20,
+                              training=True, epsilon=0.0)
+    if r_mem.shaped_return != r_off.shaped_return:
+        raise CheckFailure("memory_zero_alpha", "shaped return differs")
+    if [t[0] for t in r_mem.trajectory] != [t[0] for t in r_off.trajectory]:
+        raise CheckFailure("memory_zero_alpha", "action sequence differs")
+    if a_mem.digest() != a_off.digest():
+        raise CheckFailure("memory_zero_alpha", "agent digest differs")
+    g_mem = run_bundle_shaped(a_mem, bundle, None, total_budget=20,
+                              training=False)
+    g_off = run_bundle_shaped(a_off, bundle, None, total_budget=20,
+                              training=False)
+    if g_mem.shaped_return != g_off.shaped_return:
+        raise CheckFailure("memory_zero_alpha", "greedy re-run differs")
+    return ("shaped=%.4f actions=%d digest=%s matches flavor A"
+            % (r_off.shaped_return, len(r_off.trajectory),
+               a_off.digest()[:12]))
+
+
+def check_memory_from_config() -> str:
+    """The config block is honored, and a disabled/empty block means no memory."""
+    if memory_from_config({}, SEED) is not None:
+        raise CheckFailure("memory_from_config", "empty block built a store")
+    if memory_from_config({"enabled": False, "cap": 5}, SEED) is not None:
+        raise CheckFailure("memory_from_config", "disabled block built a store")
+    m = memory_from_config({"enabled": True, "cap": 7, "lru": False,
+                            "hash_keys": True, "alpha_mem": 0.25,
+                            "update_every_inference": False,
+                            "seed": 42}, SEED)
+    if m is None:
+        raise CheckFailure("memory_from_config", "enabled block not built")
+    if (m.cap, m.lru, m.hash_keys, m.alpha_mem, m.update_every_inference,
+            m.seed) != (7, False, True, 0.25, False, 42):
+        raise CheckFailure("memory_from_config", "keys not honored: %r"
+                           % (m.stats(),))
+    if m.update(One(), (), "PushZero", 1.0):
+        raise CheckFailure("memory_from_config",
+                           "update_every_inference=False still updated")
+    return "cap=7 lru=False hash_keys=True alpha_mem=0.25 seed=42 honored"
+
+
 NEW_CHECKS: List[Tuple[str, object]] = [
     ("reward_constants", check_reward_constants),
     ("goal_similarity", check_goal_similarity),
@@ -490,6 +676,13 @@ NEW_CHECKS: List[Tuple[str, object]] = [
     ("curriculum_phase_transitions", check_curriculum_phase_transitions),
     ("curriculum_config_keys", check_curriculum_config_keys),
     ("curriculum_bundle_fitness", check_curriculum_bundle_and_fitness),
+    ("memory_cap_lru", check_memory_cap_lru),
+    ("memory_canonical_key", check_memory_canonical_key_stability),
+    ("memory_hash_keys", check_memory_hash_keys),
+    ("memory_rollout_hook", check_memory_rollout_hook),
+    ("memory_update_action", check_memory_update_changes_action),
+    ("memory_zero_alpha", check_memory_zero_alpha_matches_flavor_a),
+    ("memory_from_config", check_memory_from_config),
 ]
 
 
@@ -623,3 +816,42 @@ def test_curriculum_config_keys_honored() -> None:
 def test_curriculum_fitness_formula_unchanged() -> None:
     """A curriculum bundle still scores with the flavor-A fitness formula."""
     check_curriculum_bundle_and_fitness()
+
+
+# --------------------------------------------------------------------------
+# pytest-style tests for the flavor-C memory compartment.
+# --------------------------------------------------------------------------
+
+def test_memory_cap_and_lru_eviction() -> None:
+    """The hard cap evicts LRU (lru=True) or FIFO oldest (lru=False)."""
+    check_memory_cap_lru()
+
+
+def test_memory_canonical_key_stability() -> None:
+    """The (target, stack) canonical key is stable and state-identifying."""
+    check_memory_canonical_key_stability()
+
+
+def test_memory_hash_key_roundtrip() -> None:
+    """hash_keys=True stores an 8-byte digest and reads back the same entry."""
+    check_memory_hash_keys()
+
+
+def test_memory_rollout_hook_updates() -> None:
+    """The rollout path calls the after-every-inference memory hook."""
+    check_memory_rollout_hook()
+
+
+def test_memory_update_changes_action() -> None:
+    """A remembered best action changes the next choice for a visited state."""
+    check_memory_update_changes_action()
+
+
+def test_memory_zero_alpha_reproduces_flavor_a() -> None:
+    """alpha_mem=0.0 keeps the net policy byte-identical to flavor A."""
+    check_memory_zero_alpha_matches_flavor_a()
+
+
+def test_memory_from_config_keys() -> None:
+    """Every memory config key is honored; disabled means no compartment."""
+    check_memory_from_config()

@@ -123,6 +123,13 @@ class EvoConfig:
     # tier(s).  The policy, reward and fitness formula are unchanged; an empty
     # dict reproduces flavor A exactly.
     curriculum: Dict[str, object] = field(default_factory=dict)
+    # -- Flavor C (task 4333): separate memory compartment ------------------
+    # When enabled ({"enabled": true, "cap": ..., "lru": ..., "hash_keys": ...,
+    # "alpha_mem": ..., "update_every_inference": ..., "seed": ...}) the loop
+    # owns ONE bounded shared MemoryStore; every agent updates it after each
+    # inference and reads it as a bounded alpha_mem term on top of the static
+    # net policy.  An empty dict (the default) reproduces flavor A exactly.
+    memory: Dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)

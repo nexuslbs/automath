@@ -32,6 +32,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from .env import BUILD_ACTIONS
 from .evolution import EVO_ACTIONS
+from .memory import MemoryStore
 from .nodes import Group, Node, One, Zero, nat
 from .target_features import (
     PolicyNet,
@@ -169,6 +170,8 @@ class EvolutionAgent:
         switch_patience: int = 6,
         net: Optional[Sequence[float]] = None,
         use_net: bool = False,
+        memory: Optional[MemoryStore] = None,
+        alpha_mem: float = 0.0,
     ) -> None:
         self.action_order = tuple(action_order)
         self.arity = dict(arity) if arity is not None else CORE_ARITY
@@ -196,6 +199,14 @@ class EvolutionAgent:
         self.net: Optional[List[float]] = (
             list(net) if net is not None else None)
         self.use_net: bool = bool(use_net and self.net is not None)
+        # Flavor C: the SEPARATE memory compartment.  When present the memory
+        # contributes a BOUNDED alpha_mem * memory_score(state, action) term to
+        # the action score and is updated after every inference.  The net stays
+        # the static main policy; the memory is not heritable.
+        self.memory: Optional[MemoryStore] = memory
+        self.use_memory: bool = memory is not None
+        self.alpha_mem: float = (
+            float(memory.alpha_mem) if memory is not None else float(alpha_mem))
         # The target of the case currently being solved; the feature encoder
         # needs it, and the bundle controller sets it on every state change.
         self.target: Optional[Node] = None
@@ -247,6 +258,47 @@ class EvolutionAgent:
         self.net = list(net) if net is not None else None
         self.use_net = self.net is not None
 
+    # -- flavor C: the separate memory compartment ------------------------
+    def set_memory(self, memory: Optional[MemoryStore],
+                   alpha_mem: Optional[float] = None) -> None:
+        self.memory = memory
+        self.use_memory = memory is not None
+        if memory is not None:
+            self.alpha_mem = (float(memory.alpha_mem) if alpha_mem is None
+                              else float(alpha_mem))
+
+    def memory_score(self, state, action: str) -> float:
+        """Bounded memory term for one action (0.0 when no exact hit)."""
+        if not self.use_memory or self.memory is None:
+            return 0.0
+        return self.memory.score(self.target, state.stack, action)
+
+    def memory_choice(self, state) -> Optional[str]:
+        """The remembered best action for this exact state, when still valid.
+
+        This is the explicit "consult memory first (exact hit)" accessor; the
+        combined ``_score`` below also folds the same bounded term into the
+        net score, so a large ``alpha_mem`` makes the remembered action win.
+        """
+        if not self.use_memory or self.memory is None:
+            return None
+        action = self.memory.best_action(self.target, state.stack)
+        if action is None or action not in self.valid(state.stack):
+            return None
+        return action
+
+    def observe(self, key: str, state, action: str, reward: float,
+                nxt=None, reached: bool = False) -> bool:
+        """The AFTER-EVERY-INFERENCE hook: remember this (state, action).
+
+        Called by the rollout right after the action was taken and its reward
+        observed.  Stores the best action for the canonical (target, stack) of
+        the state the inference was made from.
+        """
+        if not self.use_memory or self.memory is None:
+            return False
+        return self.memory.update(self.target, state.stack, action, reward)
+
     def net_logit(self, state, action: str) -> float:
         """net.forward(features(target, stack, action)) with the CURRENT target."""
         if self.net is None:
@@ -284,8 +336,13 @@ class EvolutionAgent:
         row = self.values(key, state) or {}
         q = row.get(action, 0.0)
         if self.use_net:
-            return q + self.beta * self.net_logit(state, action)
-        return q + self.beta * self._pget(action, self._ctx(state))
+            score = q + self.beta * self.net_logit(state, action)
+        else:
+            score = q + self.beta * self._pget(action, self._ctx(state))
+        # Flavor C: bounded memory contribution, added to the static score.
+        if self.use_memory and self.alpha_mem != 0.0:
+            score += self.alpha_mem * self.memory_score(state, action)
+        return score
 
     def best_action(self, key: str, state) -> Optional[str]:
         valid = self.valid(state.stack)
@@ -301,7 +358,8 @@ class EvolutionAgent:
                     best_s, best_a = s, a
             return best_a
         row = self.values(key, state)
-        if not row and not self.use_pref:
+        if not row and not self.use_pref and not (
+                self.use_memory and self.alpha_mem != 0.0):
             return None
         ctx = self._ctx(state)
         if not row:

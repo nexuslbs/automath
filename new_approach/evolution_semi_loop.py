@@ -61,6 +61,7 @@ from .evolution_semi import (
     evolve_one_generation_shaped,
 )
 from .curriculum import CurriculumSchedule
+from .memory import memory_from_config
 
 _STOP = False
 _STARTED_AT = time.time()
@@ -258,6 +259,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             bundle.fingerprint()[:16]))
     if schedule is not None:
         emit("CURRICULUM rule=%s %s" % (schedule.rule, schedule.describe()))
+    # Flavor C: ONE bounded shared memory compartment for the whole run.  It is
+    # not heritable and not persisted across restarts; the cap + LRU policy is
+    # what keeps it inside the host envelope.
+    memory = memory_from_config(cfg.memory, cfg.seed)
+    if memory is not None:
+        emit("MEMORY enabled cap=%d lru=%s hash_keys=%s alpha_mem=%.3f "
+             "update_every_inference=%s shared=run"
+             % (memory.cap, memory.lru, memory.hash_keys, memory.alpha_mem,
+                memory.update_every_inference))
 
     ck_path = os.path.join(cfg.checkpoint_dir, "checkpoint.json")
     rng = random.Random(cfg.seed)
@@ -296,7 +306,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 train_bundle = schedule.bundle_for(gen, cfg.total_budget)
             active_bundle = train_bundle
             population, record = evolve_one_generation_shaped(
-                population, gen, train_bundle, cfg, rng, cfg.seed, rcfg)
+                population, gen, train_bundle, cfg, rng, cfg.seed, rcfg,
+                memory=memory)
+            if memory is not None:
+                record["memory"] = memory.stats()
             gen += 1
             history.append(record)
             append_history_jsonl(cfg, record)
@@ -364,6 +377,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except Exception as exc:  # noqa: BLE001
         emit("FINAL_SAVE_ERROR %s" % exc)
         exit_code = 3
+    if memory is not None:
+        emit("MEMORY_FINAL %s" % memory.stats())
     reason = ("signal" if _STOP else
               ("plateau" if gens_since_improve >= cfg.plateau_generations else
                ("generation_cap" if gen >= cfg.generations else

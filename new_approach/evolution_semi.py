@@ -56,6 +56,7 @@ from .evolution_population import (
     save_generation,
 )
 from .evolution_rewards import EpisodeShaper, RewardConfig
+from .memory import MemoryStore, memory_from_config
 
 # Re-export names used by the loop / tests.
 __all__ = [
@@ -224,6 +225,11 @@ def run_bundle_shaped(
         if training:
             td = agent.learn(key, state, action, reward, nxt, reached)
             trajectory.append((action, reward, td, ctx))
+        # Flavor C: the after-every-inference hook.  Remember the action taken
+        # from this canonical (target, stack) and the reward it produced; a
+        # later inference on the same exact state consults it (bounded by
+        # alpha_mem).  A no-op when the agent has no memory.
+        agent.observe(key, state, action, reward, nxt, reached)
         remaining -= 1
         step_no += 1
         steps_in += 1
@@ -303,8 +309,14 @@ def run_bundle_shaped(
 # Learning + fitness with the shaped signal
 # --------------------------------------------------------------------------
 
-def make_shaped_agent(genome: Genome, cfg: EvoConfig, seed: int
-                      ) -> EvolutionAgent:
+def make_shaped_agent(genome: Genome, cfg: EvoConfig, seed: int,
+                      memory: Optional[MemoryStore] = None) -> EvolutionAgent:
+    # Flavor C: build the separate memory compartment from the config block
+    # (or reuse a caller-owned SHARED store for cross-generation memory).  An
+    # empty/absent config block or enabled=false yields None, so flavor A is
+    # reproduced exactly.
+    mem = (memory if memory is not None
+           else memory_from_config(getattr(cfg, "memory", {}), seed))
     return EvolutionAgent(
         action_order=EVO_ORDER,
         arity=EVO_ARITY,
@@ -322,15 +334,18 @@ def make_shaped_agent(genome: Genome, cfg: EvoConfig, seed: int
         pref_sigma=cfg.net_sigma,
         pref_mode=cfg.pref_mode,
         switch_patience=genome.switch_patience,
+        memory=mem,
+        alpha_mem=(mem.alpha_mem if mem is not None else 0.0),
     )
 
 
 def train_genome_shaped(genome: Genome, bundle: Bundle, cfg: EvoConfig,
                         seed: int,
-                        reward_config: Optional[RewardConfig] = None
+                        reward_config: Optional[RewardConfig] = None,
+                        memory: Optional[MemoryStore] = None,
                         ) -> EvolutionAgent:
     """Train the genome's agent on the SHAPED reward for ``cfg.episodes``."""
-    agent = make_shaped_agent(genome, cfg, seed)
+    agent = make_shaped_agent(genome, cfg, seed, memory=memory)
     for ep in range(max(1, cfg.episodes)):
         epsilon = agent._epsilon(ep)
         result = run_bundle_shaped(
@@ -343,9 +358,11 @@ def train_genome_shaped(genome: Genome, bundle: Bundle, cfg: EvoConfig,
 
 def evaluate_genome_shaped(genome: Genome, bundle: Bundle, cfg: EvoConfig,
                            seed: int,
-                           reward_config: Optional[RewardConfig] = None
+                           reward_config: Optional[RewardConfig] = None,
+                           memory: Optional[MemoryStore] = None,
                            ) -> ShapedBundleResult:
-    agent = train_genome_shaped(genome, bundle, cfg, seed, reward_config)
+    agent = train_genome_shaped(genome, bundle, cfg, seed, reward_config,
+                                memory=memory)
     result = run_bundle_shaped(
         agent, bundle, None, total_budget=cfg.total_budget,
         training=False, reward_config=reward_config)
@@ -404,12 +421,20 @@ def evolve_one_generation_shaped(
     population: List[Genome], gen: int, bundle: Bundle, cfg: EvoConfig,
     rng: random.Random, seed_base: int,
     reward_config: Optional[RewardConfig] = None,
+    memory: Optional[MemoryStore] = None,
 ) -> Tuple[List[Genome], dict]:
     """Evaluate on the shaped return, select by reward-threshold + solved rate,
-    reproduce by crossover/mutation.  Returns ``(new_pop, record)``."""
+    reproduce by crossover/mutation.  Returns ``(new_pop, record)``.
+
+    ``memory`` is the optional SHARED flavor-C compartment: when given, every
+    genome's agent reads and updates the SAME store, so what one agent learned
+    about a (target, stack) is visible to the rest of the population and to the
+    next generation.  When None, each agent builds its own store from
+    ``cfg.memory`` (or none at all, exactly flavor A).
+    """
     for g in population:
         evaluate_genome_shaped(g, bundle, cfg, _seed_for(g.gid, seed_base),
-                               reward_config)
+                               reward_config, memory=memory)
 
     ranked = sorted(population, key=lambda g: (-g.fitness, g.gid))
     best = ranked[0]
@@ -556,6 +581,9 @@ def train_shaped(agent: EvolutionAgent, cases: Sequence, episodes: int,
 
 def _make_case_agent(genome: Genome, cfg: EvoConfig, order, arity,
                      seed: int, episodes: int) -> EvolutionAgent:
+    # Flavor C: the CORE/EXT case agents get their own bounded memory
+    # compartment when cfg.memory is enabled (no-op for flavor A).
+    mem = memory_from_config(getattr(cfg, "memory", {}), seed)
     return EvolutionAgent(
         action_order=order, arity=arity, alpha=cfg.alpha,
         gamma=cfg.reward_gamma, epsilon_start=max(cfg.epsilon_min, genome.epsilon),
@@ -564,6 +592,7 @@ def _make_case_agent(genome: Genome, cfg: EvoConfig, order, arity,
         pref_lr=cfg.pref_lr, beta=cfg.beta,
         pref_sigma=cfg.net_sigma, pref_mode=cfg.pref_mode,
         switch_patience=genome.switch_patience,
+        memory=mem, alpha_mem=(mem.alpha_mem if mem is not None else 0.0),
     )
 
 

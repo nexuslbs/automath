@@ -414,6 +414,9 @@ def run_bundle(
         if training:
             td = agent.learn(key, state, action, reward, nxt, reached)
             trajectory.append((action, reward, td, ctx))
+        # Flavor C: remember the action taken from this canonical (target,
+        # stack); a no-op when the agent carries no memory compartment.
+        agent.observe(key, state, action, reward, nxt, reached)
         remaining -= 1
         step_no += 1
         steps_in += 1

@@ -44,6 +44,7 @@ The scheme is pure standard library, bounded and deterministic.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Optional
 
 from .nodes import Node, size
@@ -78,13 +79,28 @@ class RewardConfig:
 # goal_similarity
 # --------------------------------------------------------------------------
 
+@lru_cache(maxsize=1 << 20)
+def _canon(node: Node) -> str:
+    return node.canonical()
+
+
+@lru_cache(maxsize=1 << 20)
+def _size(node: Node) -> int:
+    return size(node)
+
+
+@lru_cache(maxsize=1 << 20)
 def match_count(target: Node, cand: Optional[Node]) -> int:
     """Nodes of ``target`` covered by the largest subtree canonically EQUAL to
-    ``cand`` (0 when there is no such subtree)."""
+    ``cand`` (0 when there is no such subtree).
+
+    Memoised on the (frozen, structurally hashed) node objects, so repeated
+    shaping over the same trees - the training hot path - costs one traversal.
+    """
     if cand is None:
         return 0
-    if target.canonical() == cand.canonical():
-        return size(target)
+    if _canon(target) == _canon(cand):
+        return _size(target)
     best = 0
     for child in target.children():
         m = match_count(child, cand)
@@ -98,10 +114,10 @@ def is_proper_subgoal(target: Node, top: Optional[Node],
     """True iff ``top`` is a non-goal, non-trivial sub-structure of ``target``."""
     if top is None:
         return False
-    if top.canonical() == target.canonical():
+    if _canon(top) == _canon(target):
         return False
-    n_top = size(top)
-    if n_top < min_size or n_top >= size(target):
+    n_top = _size(top)
+    if n_top < min_size or n_top >= _size(target):
         return False
     return match_count(target, top) == n_top
 
@@ -109,7 +125,7 @@ def is_proper_subgoal(target: Node, top: Optional[Node],
 def _similarity_from_match(n_t: int, top: Optional[Node], m_top: int) -> float:
     if top is None:
         return 0.0
-    n_top = size(top)
+    n_top = _size(top)
     denom = max(n_t, n_top)
     size_prox = 0.0 if denom == 0 else 1.0 - abs(n_top - n_t) / denom
     match_frac = (m_top / n_t) if n_t else 0.0
@@ -120,7 +136,7 @@ def goal_similarity(target: Node, state) -> float:
     """Two-term similarity in ``[0, 1]`` of the stack TOP to ``target``."""
     top = state.stack[-1] if state.stack else None
     m_top = match_count(target, top) if top is not None else 0
-    return _similarity_from_match(size(target), top, m_top)
+    return _similarity_from_match(_size(target), top, m_top)
 
 
 def phi(target: Node, state, scale: float = PHI_SCALE) -> float:
@@ -184,7 +200,7 @@ class EpisodeShaper:
 
     def reward(self, target: Node, state, nxt, reached: bool) -> RewardBreakdown:
         cfg = self.config
-        n_t = size(target)
+        n_t = _size(target)
         # Compute match_count ONCE per top node (state top and next top) and
         # reuse it for both the similarity and the sub-goal predicate.  This is
         # the hot path of training, so it must stay O(tree) with no repeated
@@ -202,8 +218,8 @@ class EpisodeShaper:
         subgoal = False
         bonus = 0.0
         if (top_n is not None and top is not None
-                and top_n.canonical() != target.canonical()):
-            n_top = size(top_n)
+                and _canon(top_n) != _canon(target)):
+            n_top = _size(top_n)
             if (n_top >= cfg.min_subgoal_size and n_top < n_t
                     and m_n == n_top and m_n > m_s):
                 bonus = cfg.subgoal_bonus
@@ -227,5 +243,5 @@ class EpisodeShaper:
             step_cost=cfg.step_cost, shaping=shaping, bonus=bonus,
             shaping_applied=applied, final=final, total=total, capped=capped,
             phi=phi_s, phi_next=phi_n, similarity=sim, similarity_next=sim_n,
-            top=(top_n.canonical() if top_n is not None else ""),
+            top=(_canon(top_n) if top_n is not None else ""),
             subgoal=subgoal)

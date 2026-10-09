@@ -46,6 +46,11 @@ def main(argv=None) -> int:
     res = {
         "label": "G3-heldout-eval-only",
         "approach": "G3-novelty",
+        "episodes": 0,
+        "seed": cfg.seed,
+        "train_cases_core": 0,
+        "train_cases_evo": 0,
+        "train_cases_total": 0,
         "train_wall_secs": 0.0,
         "seed_gid": genome.gid,
         "source_generation": gen,

@@ -1,0 +1,106 @@
+# Evolution pipeline: node extension, reward scaffolding, stochastic valuation
+
+Branch `evolution` (from `new` @ `b78cc29c1843e5ee17c9abeb132cd91100c269fc`).
+Units: Stage 1 (more semantic node kinds), Stage 2 (artificial reward/guidance
+scaffolding), Stage 3 (remove scaffolding -> stochastic step-type valuation).
+
+The four CORE node types are unchanged: `Zero`, `One`, `Change`, `Group`. All
+new vocabulary is DERIVED, so the former 4 -> 3 -> 2 -> 1 reduction proof stays
+literally true.
+
+---
+
+## Stage 1 - more semantic node kinds (derived)
+
+### 1. Design
+
+The operator's core directive is to add more nodes so agents can solve more
+complex scenarios. Adding new node *classes* would break the reduction theorem
+(the whole point of the `new` branch), so this unit adds new semantic node
+KINDS instead:
+
+* A kind `K` with reserved integer tag `t` and arity `k` is the core node
+  `Group(nat(t), (a1..ak))` - exactly the same construction the existing
+  `ADD`/`LT`/... operators already use.
+* Each kind gets a BUILD ACTION (`MakeAdd`, ...) that consumes `k` already
+  built operands and pushes that `Group`. The action vocabulary grows by 18
+  kinds; the node-class count does not.
+* New axiom tags introduced: `DIV=14`, `GT=15`, `LE=16`, `GE=17`, `MOD=18`,
+  `NEG=19`. Existing tags are reused for `ADD/SUB/MUL/EQ/LT/AND/OR/NOT/IF/SEQ`.
+
+The environment is `EvoEnv`, the same stack machine as `MinimalEnv` over the
+extended action vocabulary. Each action pops `arity` nodes and pushes one, so a
+target tree of `N` nodes is reached in exactly `N` actions and the unique build
+is still the post-order word (`sem_plan`).
+
+### 2. New kinds, build actions, arities and their reduction onto the 4 cores
+
+`nat(t)` is the core numeral `One`/`Change` chain; every mapping below uses
+only `Zero`, `One`, `Change`, `Group`.
+
+| kind | action | tag | arity | explicit core encoding |
+| ---- | ------ | --- | ----: | ---------------------- |
+| arithmetic | `MakeAdd` | 1 | 2 | `Group(nat(1),(a,b))` |
+| arithmetic | `MakeSub` | 2 | 2 | `Group(nat(2),(a,b))` |
+| arithmetic | `MakeMul` | 3 | 2 | `Group(nat(3),(a,b))` |
+| arithmetic | `MakeDiv` | 14 | 2 | `Group(nat(14),(a,b))` |
+| arithmetic | `MakeMod` | 18 | 2 | `Group(nat(18),(a,b))` |
+| arithmetic | `MakeNeg` | 19 | 1 | `Group(nat(19),(a,))` |
+| comparison | `MakeEq` | 5 | 2 | `Group(nat(5),(a,b))` |
+| comparison | `MakeLt` | 4 | 2 | `Group(nat(4),(a,b))` |
+| comparison | `MakeGt` | 15 | 2 | `Group(nat(15),(a,b))` |
+| comparison | `MakeLe` | 16 | 2 | `Group(nat(16),(a,b))` |
+| comparison | `MakeGe` | 17 | 2 | `Group(nat(17),(a,b))` |
+| logic | `MakeAnd` | 7 | 2 | `Group(nat(7),(a,b))` |
+| logic | `MakeOr` | 8 | 2 | `Group(nat(8),(a,b))` |
+| logic | `MakeNot` | 6 | 1 | `Group(nat(6),(a,))` |
+| control | `MakeIf` | 9 | 3 | `Group(nat(9),(c,t,e))` (lazy) |
+| sequencing | `MakeSeq2` | 10 | 2 | `Group(nat(10),(a,b))` |
+| sequencing | `MakeSeq3` | 10 | 3 | `Group(nat(10),(a,b,c))` |
+| sequencing | `MakeSeq4` | 10 | 4 | `Group(nat(10),(a,b,c,d))` |
+
+**Reduction theorem (kept).** Each new kind is a `Group`, and every `Group` is
+one of the four core classes; `nat` only emits `Zero`/`One`/`Change`. The test
+`semantic_reduction_core` asserts that all 17 distinct semantic trees in the
+suite use at most the 4 core classes and that every scenario target is still
+buildable by the core 4-action plan (`PushZero/PushOne/MakeChange/MakeGroupK`).
+`node_type_count` stays 4; `to_min3`/`to_min2`/`to_cell` therefore apply to the
+new kinds unchanged (an identity structural decomposition for the kind itself).
+
+Honest boundary: `MakeSeq4` has 4 items, so a core build would need a
+`MakeGroup5` action that the minimal core vocabulary does not ship. The NODE is
+still a legal core `Group`; only that one build action goes beyond the core
+action set. This is stated rather than hidden, and no test target depends on it.
+
+### 3. Complex scenario suite (requires the new kinds)
+
+`evolution.scenarios()` is deterministic and single-solution where possible:
+
+| scenario | expression | expected |
+| -------- | ---------- | -------- |
+| `e_add_mul` | `add(1, mul(1, 3))` | 4 |
+| `e_div` | `div(mul(3,3), 3)` | 3 |
+| `e_mod` | `mod(7,3)` | 1 |
+| `e_neg` | `neg(3)` | -3 |
+| `e_cmp` | `and(lt(1,3), ge(3,3))` | true |
+| `e_eq_gt` | `and(eq(2,2), not(gt(1,2)))` | true |
+| `e_logic` | `or(not(0), and(1,0))` | true |
+| `e_branch` | `if(lt(1,3), add(1,1), mul(0,3))` | 2 |
+| `e_nested` | `mul(add(1,1), sub(3,1))` | 4 |
+| `e_seq` | `seq(add(1,1), not(0), mul(3,1))` | (2, true, 3) |
+| `e_seq4` | `seq(add(2,2), div(8,2))` | (4, 4) |
+
+`UNIQUE_SEM_TARGETS` adds six small targets whose restricted alphabets make an
+exhaustive single-solution proof cheap. `semantic_new_initial_states` verifies
+all 114 non-trivial prefixes of the 11 scenario words reach the same target.
+
+### 4. Test command
+
+```sh
+cd /opt/automath/repo
+/opt/automath/venv/bin/python -m new_approach.tests            # prior 11/11, unchanged
+/opt/automath/venv/bin/python -m new_approach.evolution_tests  # prior 11 + 9 new
+```
+
+The extended runner imports the prior `CHECKS` unchanged, so a regression in
+the original semantics fails the extended run too.

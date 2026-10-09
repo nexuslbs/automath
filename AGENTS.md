@@ -11,6 +11,11 @@ short and current; project conventions here win over generic templates.
 * `dynamic_env/` - the GENERIC dynamic-nodes environment (branch
   `dynamic-nodes`): node types, node instances and axioms are DATA in
   `data/dynamic_env/*.json`; the engine contains no spec-specific knowledge.
+* `evolution_trainer/` - the Unit B EVOLUTIONARY PROCESS on `dynamic_env`
+  (branch `dynamic-nodes`): a target-conditioned policy genome, reward-along-the
+  way with anti-farming, two-parent reproduction that shares BOTH parents'
+  weights, depth-limited subagent recursion, step spending and checkpoints.
+  Standard library only; see `docs/evolution/EVOLUTION.md`.
 * `env/`, `agent/`, `utils/` - the upstream/reference implementation.
 * `docs/evolution/` - design docs and evidence for the evolution work
   (`DESIGN.md`, `REWARDS.md`, `DYNAMIC_NODES.md`, `STRICT_LAWS.md`).
@@ -25,6 +30,8 @@ library test runners are the primary contract; pytest is a mirror.
 /opt/automath/venv/bin/python -m new_approach.evolution_tests  # extended
 /opt/automath/venv/bin/python -m dynamic_env.tests             # dynamic env, 13 checks
 /opt/automath/venv/bin/python -m pytest dynamic_env/tests.py   # pytest mirror
+/opt/automath/venv/bin/python -m evolution_trainer.tests       # evolution, 13 checks
+/opt/automath/venv/bin/python -m pytest -q evolution_trainer/tests.py  # pytest mirror
 ```
 
 The environment for the dynamic-nodes work is standard-library only; do not add
@@ -42,6 +49,24 @@ a dependency to build or test it.
 * Reward is `goal_reward` on the solving step and `-step_cost` otherwise.
 * A new environment is a new JSON spec under `data/dynamic_env/`, never a code
   branch in the engine. The test `no_spec_ids_in_engine` enforces this.
+
+## Evolution-process contract (Unit B)
+
+* One genome = the weights of a small target-conditioned MLP; its input is
+  `env.state_vector(state)` (objectives + target) plus a subgoal mask and a
+  spec-derived action encoding; its output is one logit per legal action.
+* All randomness is a single seeded `random.Random`; a run is reproducible for
+  the same `(seed, spec, config)`. No gradient and no new dependency.
+* Progress rewards are credited ONCE per objective and ONCE per guarded
+  objective per episode: toggling/clearing cannot farm reward.
+* A child of two parents must record `hull_ok` (its noiseless blend inside the
+  two-parent convex hull) and its mutation magnitude; an agent without budget
+  dies childless. Subagent recursion is depth-limited and its reward credits
+  back to the spawning lineage under a cap.
+* Checkpoints (`best_gen_*.json`, `best_agents_persist.json`, `checkpoint.json`)
+  and history (`history.csv`, `reward_trajectory.csv`) are written per
+  generation. Keep this unit short and deterministic; long curriculum runs are
+  later units.
 
 ## Branches
 

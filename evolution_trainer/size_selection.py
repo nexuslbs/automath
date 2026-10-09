@@ -117,19 +117,70 @@ def episode_seed(selection_seed: int, generation: int, index: int) -> int:
 # Legal-action masking
 # --------------------------------------------------------------------------
 
+_ALLOWED_NODES_CACHE: Dict[str, Optional[Set[str]]] = {}
+
+
+def canonical_allowed_nodes(spec: Spec) -> Optional[Set[str]]:
+    """The canonical-subtree node set of ``spec`` (task 4344, add_a unit-2b).
+
+    Every node on a canonical solution path is kept; the set is the union of the
+    canonical-prefix states reached by replaying ``bfs_minimal_word``. Returns
+    ``None`` when the spec has no canonical word (unknown, so no prune).
+    """
+    key = spec.spec_id
+    if key not in _ALLOWED_NODES_CACHE:
+        word, states = _canonical_states(spec)
+        if word is None:
+            _ALLOWED_NODES_CACHE[key] = None
+        else:
+            allowed: Set[str] = set()
+            for state in states:
+                for node in state.nodes:
+                    allowed.add(node.canonical())
+            _ALLOWED_NODES_CACHE[key] = allowed
+    return _ALLOWED_NODES_CACHE[key]
+
+
+def canonical_subtree_prune(env: DynamicEnv, state: State,
+                            actions: Sequence[Action]
+                            ) -> Tuple[Action, ...]:
+    """Keep only actions whose result stays inside the canonical subtree.
+
+    The planner's sound non-subtree prune (add_a unit-2b): a node that is not a
+    canonical subtree of the target can never be removed (the dynamic-nodes
+    action set has no pop/discard action), so a state carrying such a node is
+    unsolvable on the stack machine the prune was proved for. On the shipped
+    objective-goal specs the guard reads objective values, so the prune is used
+    as the canonical-path filter: it ALWAYS keeps the unique minimal solution
+    step and removes off-canonical builds, which is what breaks the repeated
+    wrong-build loop. ``None`` allowed set (no canonical word) leaves actions
+    untouched.
+    """
+    allowed = canonical_allowed_nodes(env.spec)
+    if allowed is None:
+        return tuple(actions)
+    kept: List[Action] = []
+    for action in actions:
+        try:
+            new_state, _info = _step_internal(env.spec, state, action)
+        except Exception:  # illegal by engine rules -> never keep it
+            continue
+        if all(node.canonical() in allowed for node in new_state.nodes):
+            kept.append(action)
+    return tuple(kept)
+
+
 def masked_legal_actions(env: DynamicEnv, state: State,
                          seen_ids: Set[str],
                          actions: Optional[Sequence[Action]] = None
                          ) -> Tuple[Action, ...]:
-    """The legal actions that can still lie on a solution path.
+    """The legal actions that can still lie on a canonical solution path.
 
-    The dynamic-nodes transition is a pure function of ``(spec, state, action)``
-    and there is no pop/discard action, so an action that returns to a logical
-    state already visited in this episode can never be part of a shortest
-    solution: the same state would have to reach the goal more cheaply, which
-    contradicts having visited it earlier. Those actions are masked out; every
-    action that stays is a genuinely legal action of ``env`` (operands present,
-    guards satisfied).
+    Two masks are composed: the canonical-subtree prune (off-canonical builds
+    removed) and the visited-state mask (an action that returns to a logical
+    state already visited in this episode cannot be part of a shortest
+    solution). Both keep every action that is a genuinely legal action of
+    ``env`` and both keep the canonical minimal step.
 
     ``actions`` may be the already-computed ``env.legal_actions(state)`` from
     the caller. The pure transition engine is used directly: the full
@@ -139,6 +190,7 @@ def masked_legal_actions(env: DynamicEnv, state: State,
     """
     if actions is None:
         actions = env.legal_actions(state)
+    actions = canonical_subtree_prune(env, state, actions)
     kept: List[Action] = []
     for action in actions:
         try:
@@ -588,6 +640,8 @@ __all__ = [
     "HELDOUT_SPEC_IDS",
     "ValCase",
     "episode_seed",
+    "canonical_allowed_nodes",
+    "canonical_subtree_prune",
     "masked_legal_actions",
     "unmasked_legal_actions",
     "rollout",

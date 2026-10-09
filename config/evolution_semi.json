@@ -1,6 +1,6 @@
 {
   "population": 16,
-  "episodes": 25,
+  "episodes": 20,
   "total_budget": 90,
   "generations": 2000,
   "wall_clock_hours": 4.0,
@@ -26,7 +26,7 @@
   "plateau_tol": 0.0001,
   "validation_every": 100,
   "validation_ext_every": 500,
-  "validation_episodes": 300,
+  "validation_episodes": 200,
   "restart_on_stall": 0,
   "checkpoint_dir": "/opt/automath/tmp/semi-evo/checkpoints",
   "progress_dir": "/opt/automath/tmp/semi-evo",

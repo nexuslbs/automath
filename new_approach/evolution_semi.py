@@ -172,16 +172,19 @@ def run_bundle_shaped(
             sr.solved = True
             solved += 1
             shaped_return += rcfg.goal_reward
-            reward_log.append({
-                "step": step_no, "sid": current, "action": "",
-                "target": target.canonical(), "step_cost": 0.0,
-                "shaping": 0.0, "subgoal_bonus": 0.0, "shaping_applied": 0.0,
-                "final_reward": rcfg.goal_reward, "total": rcfg.goal_reward,
-                "capped": 0.0, "phi": 0.0, "phi_next": 0.0,
-                "similarity": 1.0, "similarity_next": 1.0,
-                "top": target.canonical(), "subgoal": False,
-                "already_goal": True,
-            })
+            if not training:
+                reward_log.append({
+                    "step": step_no, "sid": current, "action": "",
+                    "target": target.canonical(), "step_cost": 0.0,
+                    "shaping": 0.0, "subgoal_bonus": 0.0,
+                    "shaping_applied": 0.0,
+                    "final_reward": rcfg.goal_reward,
+                    "total": rcfg.goal_reward,
+                    "capped": 0.0, "phi": 0.0, "phi_next": 0.0,
+                    "similarity": 1.0, "similarity_next": 1.0,
+                    "top": target.canonical(), "subgoal": False,
+                    "already_goal": True,
+                })
             trace.append(TraceEvent(step_no, "solve", current,
                                     "goal reached in %d steps" % sr.steps))
             current = choose_next(current)
@@ -217,9 +220,10 @@ def run_bundle_shaped(
         sr.steps += 1
         sr.reward += reward
         shaped_return += reward
-        reward_log.append(rb.to_dict(step=step_no, sid=current,
-                                     target=target.canonical(),
-                                     action=action))
+        if not training:
+            reward_log.append(rb.to_dict(step=step_no, sid=current,
+                                         target=target.canonical(),
+                                         action=action))
         prog = _progress(nxt, target)
         if prog > best_partial:
             best_partial = prog

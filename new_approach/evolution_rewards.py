@@ -106,17 +106,21 @@ def is_proper_subgoal(target: Node, top: Optional[Node],
     return match_count(target, top) == n_top
 
 
-def goal_similarity(target: Node, state) -> float:
-    """Two-term similarity in ``[0, 1]`` of the stack TOP to ``target``."""
-    top = state.stack[-1] if state.stack else None
+def _similarity_from_match(n_t: int, top: Optional[Node], m_top: int) -> float:
     if top is None:
         return 0.0
-    n_t = size(target)
     n_top = size(top)
     denom = max(n_t, n_top)
     size_prox = 0.0 if denom == 0 else 1.0 - abs(n_top - n_t) / denom
-    match_frac = (match_count(target, top) / n_t) if n_t else 0.0
+    match_frac = (m_top / n_t) if n_t else 0.0
     return 0.5 * size_prox + 0.5 * match_frac
+
+
+def goal_similarity(target: Node, state) -> float:
+    """Two-term similarity in ``[0, 1]`` of the stack TOP to ``target``."""
+    top = state.stack[-1] if state.stack else None
+    m_top = match_count(target, top) if top is not None else 0
+    return _similarity_from_match(size(target), top, m_top)
 
 
 def phi(target: Node, state, scale: float = PHI_SCALE) -> float:
@@ -180,18 +184,28 @@ class EpisodeShaper:
 
     def reward(self, target: Node, state, nxt, reached: bool) -> RewardBreakdown:
         cfg = self.config
-        sim = goal_similarity(target, state)
-        sim_n = goal_similarity(target, nxt)
+        n_t = size(target)
+        # Compute match_count ONCE per top node (state top and next top) and
+        # reuse it for both the similarity and the sub-goal predicate.  This is
+        # the hot path of training, so it must stay O(tree) with no repeated
+        # canonicalisation.
+        top = state.stack[-1] if state.stack else None
+        top_n = nxt.stack[-1] if nxt.stack else None
+        m_s = match_count(target, top) if top is not None else 0
+        m_n = match_count(target, top_n) if top_n is not None else 0
+        sim = _similarity_from_match(n_t, top, m_s)
+        sim_n = _similarity_from_match(n_t, top_n, m_n)
         phi_s = cfg.phi_scale * sim
         phi_n = cfg.phi_scale * sim_n
         shaping = cfg.gamma * phi_n - phi_s
 
-        top = nxt.stack[-1] if nxt.stack else None
-        prev_top = state.stack[-1] if state.stack else None
         subgoal = False
         bonus = 0.0
-        if is_proper_subgoal(target, top, cfg.min_subgoal_size):
-            if match_count(target, top) > match_count(target, prev_top):
+        if (top_n is not None and top is not None
+                and top_n.canonical() != target.canonical()):
+            n_top = size(top_n)
+            if (n_top >= cfg.min_subgoal_size and n_top < n_t
+                    and m_n == n_top and m_n > m_s):
                 bonus = cfg.subgoal_bonus
                 subgoal = True
 
@@ -213,4 +227,5 @@ class EpisodeShaper:
             step_cost=cfg.step_cost, shaping=shaping, bonus=bonus,
             shaping_applied=applied, final=final, total=total, capped=capped,
             phi=phi_s, phi_next=phi_n, similarity=sim, similarity_next=sim_n,
-            top=(top.canonical() if top is not None else ""), subgoal=subgoal)
+            top=(top_n.canonical() if top_n is not None else ""),
+            subgoal=subgoal)

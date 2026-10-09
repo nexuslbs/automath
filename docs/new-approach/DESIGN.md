@@ -190,7 +190,7 @@ Checks (11): `node_type_count`, `meta_not_node_types`, `expressiveness_min4`,
 
 * 11/11 checks pass on the remote venv; full output in
   `/opt/workspace/tmp/automath-new/u1/EVIDENCE.md` and
-  `docs/new-approach/EVIDENCE.md`.
+  `docs/evidence/u1/EVIDENCE.md`.
 * Node types actually used by the whole suite: **4** (`Zero`, `One`, `Change`,
   `Group`). Target 4 met; the same samples also run at 3, 2 and 1 types.
 * Fixed-state goals: exhaustive enumeration proves exactly ONE solution each

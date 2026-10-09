@@ -360,14 +360,47 @@ def evaluate_genome_shaped(genome: Genome, bundle: Bundle, cfg: EvoConfig,
                            seed: int,
                            reward_config: Optional[RewardConfig] = None,
                            memory: Optional[MemoryStore] = None,
+                           gen: int = 0,
                            ) -> ShapedBundleResult:
     agent = train_genome_shaped(genome, bundle, cfg, seed, reward_config,
                                 memory=memory)
+    # gen-fitness dense hook: additionally train on a bounded rotating batch of
+    # the ported G1 dense-state cases (single-case path), so the training
+    # distribution includes dense intermediates, not only bundle states.  The
+    # import is lazy to avoid the gen_common <-> evolution_semi import cycle.
+    genome.dense_cases = 0
+    if getattr(cfg, "dense_hook", False):
+        from . import gen_common as _gc
+        dense_n = int(getattr(cfg, "dense_batch", 16))
+        cases = _gc.dense_train_batch(
+            dense_n, int(getattr(cfg, "dense_seed", 20261010))
+            + 1000003 * int(gen))
+        _gc.train_shaped_bounded(
+            agent, cases, int(getattr(cfg, "dense_episodes", 1)),
+            batch=len(cases),
+            seed=int(getattr(cfg, "dense_seed", 20261010)) + int(gen))
+        genome.dense_cases = len(cases)
     result = run_bundle_shaped(
         agent, bundle, None, total_budget=cfg.total_budget,
         training=False, reward_config=reward_config)
-    genome.fitness = (result.shaped_return
-                      + cfg.solved_rate_weight * result.solved_rate())
+    # BEFORE: shaped_return + solved_rate_weight * solved_rate.
+    base = (result.shaped_return
+            + cfg.solved_rate_weight * result.solved_rate())
+    # AFTER: + val_weight * (greedy solved rate on a held-out validation batch).
+    val_rate = 0.0
+    val_total = 0
+    val_weight = float(getattr(cfg, "val_weight", 0.0))
+    if val_weight:
+        from . import gen_common as _gc
+        from .validation_set import validation_batch
+        batch = validation_batch(cfg, gen)
+        val = _gc.rollout_eval(agent, batch)
+        val_total = int(val["total"])
+        val_rate = (val["solved"] / val_total) if val_total else 0.0
+    genome.fitness = base + val_weight * val_rate
+    genome.fitness_base = base
+    genome.val_solved_rate = val_rate
+    genome.val_total = val_total
     genome.solver_score = result.solver_score()
     genome.chooser_score = result.chooser_score()
     genome.solved_feasible = result.solved_feasible
@@ -434,7 +467,7 @@ def evolve_one_generation_shaped(
     """
     for g in population:
         evaluate_genome_shaped(g, bundle, cfg, _seed_for(g.gid, seed_base),
-                               reward_config, memory=memory)
+                               reward_config, memory=memory, gen=gen)
 
     ranked = sorted(population, key=lambda g: (-g.fitness, g.gid))
     best = ranked[0]
@@ -505,6 +538,14 @@ def evolve_one_generation_shaped(
             best._result.shaped_return if best._result else 0.0, 6),
         "mean_fitness": round(mean_fitness, 6),
         "threshold": round(threshold, 6),
+        # gen-fitness: the held-out validation term that now enters selection.
+        "val_weight": float(getattr(cfg, "val_weight", 0.0)),
+        "val_batch": int(getattr(cfg, "val_batch", 0)),
+        "best_val_solved_rate": round(
+            getattr(best, "val_solved_rate", 0.0), 6),
+        "best_val_total": int(getattr(best, "val_total", 0)),
+        "dense_hook": bool(getattr(cfg, "dense_hook", False)),
+        "dense_cases": int(getattr(population[0], "dense_cases", 0)),
         "restart": restarted,
         "gens_since_best": int(_STALL["gens_since_best"])
         if (cfg.restart_on_stall and cfg.restart_on_stall > 0) else 0,
@@ -516,6 +557,10 @@ def evolve_one_generation_shaped(
         "agents": [{
             "gid": g.gid, "origin": g.origin, "parents": list(g.parents),
             "fitness": round(g.fitness, 6),
+            "fitness_base": round(getattr(g, "fitness_base", g.fitness), 6),
+            "val_solved_rate": round(getattr(g, "val_solved_rate", 0.0), 6),
+            "val_total": int(getattr(g, "val_total", 0)),
+            "dense_cases": int(getattr(g, "dense_cases", 0)),
             "shaped_return": round(
                 g._result.shaped_return if g._result else 0.0, 6),
             "solved_rate": round(

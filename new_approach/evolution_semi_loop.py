@@ -337,12 +337,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                            / max(1, len(train_bundle.feasible())))
             emit("GEN gen=%d phase=%d best=%.4f shaped=%.4f mean=%.4f "
                  "solved=%d/%d rate=%.2f steps=%d plateau=%d best_gid=%s "
-                 "pool=%d"
+                 "pool=%d val=%.3f/%d val_weight=%.2f dense=%d"
                  % (gen, active_phase, best.fitness,
                     best._result.shaped_return if best._result else 0.0,
                     mean_fitness, best.solved_feasible,
                     len(train_bundle.feasible()), solved_rate, best.steps,
-                    gens_since_improve, best.gid, len(record["pool"])))
+                    gens_since_improve, best.gid, len(record["pool"]),
+                    record.get("best_val_solved_rate", 0.0),
+                    record.get("best_val_total", 0),
+                    record.get("val_weight", 0.0),
+                    record.get("dense_cases", 0)))
             now = time.time()
             milestone = (gen % cfg.validation_every == 0)
             due = (milestone

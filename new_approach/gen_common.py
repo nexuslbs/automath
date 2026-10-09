@@ -227,6 +227,26 @@ def _clear_caches() -> None:
         pass
 
 
+_DENSE_CACHE: Optional[Tuple[List[SimpleCase], List[SimpleCase]]] = None
+
+
+def dense_evo_cases() -> List[SimpleCase]:
+    """The cached EVO half of the G1 dense set (243 cases, single-case path)."""
+    global _DENSE_CACHE
+    if _DENSE_CACHE is None:
+        core, evo, _total = dense_cases()
+        _DENSE_CACHE = (core, evo)
+    return _DENSE_CACHE[1]
+
+
+def dense_train_batch(batch: int, seed: int) -> List[SimpleCase]:
+    """A deterministic bounded batch of dense EVO cases for the loop hook."""
+    pool = dense_evo_cases()
+    if batch <= 0 or batch >= len(pool):
+        return list(pool)
+    return random.Random(seed).sample(pool, batch)
+
+
 def train_shaped_bounded(agent, cases: Sequence, episodes: int,
                          batch: int = 48, seed: int = SEED) -> None:
     """Dense-set training with a fixed-size rotating minibatch per episode.

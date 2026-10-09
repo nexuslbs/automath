@@ -130,6 +130,22 @@ class EvoConfig:
     # inference and reads it as a bounded alpha_mem term on top of the static
     # net policy.  An empty dict (the default) reproduces flavor A exactly.
     memory: Dict[str, object] = field(default_factory=dict)
+    # -- gen-fitness (task 4342): held-out validation term -----------------
+    # fitness = shaped_return + solved_rate_weight * solved_rate
+    #           + val_weight * val_solved_rate
+    # ``val_weight=0.0`` computes nothing and reproduces flavors A/B exactly.
+    val_weight: float = 0.0
+    val_batch: int = 16
+    val_seed: int = 20261010
+    # -- gen-fitness (task 4342): G1 dense single-case training hook -------
+    # When True the loop additionally trains each genome's agent on a bounded
+    # rotating batch of the ported G1 dense-state cases (single-case path), so
+    # the training distribution includes dense intermediates, not only bundle
+    # states.  False (the default) leaves flavors A/B/C byte-identical.
+    dense_hook: bool = False
+    dense_batch: int = 16
+    dense_episodes: int = 1
+    dense_seed: int = 20261010
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)

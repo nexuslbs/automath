@@ -1,5 +1,96 @@
 # automath improvement and alternative-approach report (units U6+U7)
 
+## U7 final verdict (independent verification folded in)
+
+Closeout of the U6 independent-tester verdict `FAIL (partial)`. Base at start:
+`99752be5edd8eff56c2cec29c3e0eaa8b1180c9b`. Raw evidence is versioned under
+`docs/evidence/` (`u2`..`u5/EVIDENCE.md`, `u6/TESTER-REPORT.md`,
+`u7/EVIDENCE.md`); every number below is traceable to one of those files.
+
+### (i) What landed, per fix (commit shas)
+
+| fix | sha | observable change |
+| --- | --- | --- |
+| fix 5 bounded memory / retention drop | `69ece25` | `DEFAULT_MAX_HISTORY_STATE_SIZE=128`, `max_history_size` / `dropped_history` exposed; module peak RSS bounded |
+| fix 2 + 4 macro layer + torch | `9142b60` + torch pin `0bb1196` | bounded macro-action selection space over `env/macro_action.py`; installed CPU torch 2.14.1+cpu recorded |
+| option C prior | `cd40cb6` | offline `minicpm5-1b` macro-action candidates injected with `--macro-prior` |
+| train + held-out eval | `99752be` | bounded macro SmartAgent training and held-out eval |
+| U7 closeout (this unit) | this commit | eval-mode DQN inference (dropout off at inference), untrained-baseline control, deterministic re-run, evidence pack |
+
+### (ii) What the INDEPENDENT tester confirmed (its own numbers)
+
+* fix 5 regression `bash scripts/check_bounded_memory.sh` exits `0`; peak RSS
+  `355128` kB under the 1.4 GB `ulimit -v`, and the bounded module run peaks at
+  `260424` kB (exit 124 at the 300 s wall cap is CPU, not memory).
+* `test_suite/macro_action_test.py`: `5 passed in 4.13s`.
+* torch `2.14.1+cpu`.
+* the injected prior replaces the built-in catalogue (4 built-in -> 3 injected
+  macros; selection space equals the injected set).
+* the no-network proof holds: eval runs under `unshare -n` while outbound
+  `curl`/`urllib` fail in the SAME namespace.
+* `4307`: a wrong macro yields a structured `BooleanExceptionInfo` tuple plus a
+  `last_error:` observation line, not a traceback.
+* `4308`: `dropped_history 0` and `max_history <= 12` of the 128 bound.
+* no held-out leakage into training; no model/llm container; other-work
+  containers untouched.
+
+### (iii) What was REFUTED
+
+* The held-out evaluation did **not** evidence learning: an untrained checkpoint
+  reached the same 4/6 goal set and reproduced the committed `indices` row.
+* The earlier committed eval numbers were **not reproducible** and the PASS/FAIL
+  set flipped (`signed_int`), traced to dropout staying active on the
+  `select_action` path (`DQN.forward` defaulted to `training=True`). Fixed in the
+  U7 closeout: `self.policy_net(state_tensor, training=False)`.
+* The sub-second verdict per case was **not stable** across repeats.
+
+### (iv) Honest overall verdict on the operator's goal
+
+On this 2 vCPU / 3.8 GB no-swap box, a small self-hosted RL policy does **not**
+solve the held-out math cases as a learned solver. After the dropout fix the
+trained 3-macro policy deterministically reaches 4/6 goals (`binary_int`,
+`signed_int`, `int_to_binary`, `boolean_lt`) and fails the two `HaveScratch`
+cases (`indices`, `control_flow`). The four goals succeed because the frozen
+result catalogue already contains the solving macro sequence, not because the
+symbolic environment was learned. Training does now beat the requested
+same-seed untrained control at the goal level (4/6 vs 0/6), so the network moved
+its greedy macro choice; but the untrained goal set is init-dependent (the
+tester's differently-seeded untrained net also hit 4/6), and the DQN never
+converged (`epsilon 0.892` after 42 episodes), so no general "learned policy"
+claim is supported.
+
+### (v) Concrete next fixes, prioritized, with the motivating evidence
+
+1. **Exploration / optimization of the DQN.** Evidence: training ran the full
+   485 s / 2 vCPU budget to 42 episodes and stopped with `epsilon 0.89238204`;
+   2/42 episodes still failed. Before any "learned" claim, training must beat a
+   DISTRIBUTION of untrained seeds at the goal level, not one sample.
+2. **Macro-catalogue coverage for the `HaveScratch` families.** Evidence:
+   `indices` and `control_flow` both FAIL (goal False, `m=4`, reward
+   `-560.379837` / `-571.739674`) in all three deterministic runs. Add a
+   validated recipe using the offline LLM prior with grammar-constrained
+   decoding; the 1B prior pass accepted 3/4 structurally valid but semantically
+   poor candidates.
+3. **Compact observation (fix 3 of the prior report).** Evidence: states are
+   `torch.Size([1, 28273, 8])`; a policy that scales beyond macro selection
+   needs a bounded observation.
+4. **Only then re-test LLM-as-prior quality.** Evidence: the current 1B prior
+   candidates were structurally valid but did not solve a family.
+
+Trained-vs-untrained goal set with the fixed code (same checkpoint, same seed 1,
+max-steps 12, byte-identical across three repeats except wall-clock fields):
+
+| case | trained goal | trained m | trained reward | untrained goal | untrained m | untrained reward |
+| --- | --- | --- | --- | --- | --- | --- |
+| binary_int | True | 1 | 9960.319147 | False | 12 | -1212.0 |
+| signed_int | True | 1 | 9960.318325 | False | 12 | -1212.0 |
+| int_to_binary | True | 1 | 9960.319147 | False | 12 | -1212.0 |
+| boolean_lt | True | 1 | 9960.319696 | False | 12 | -1212.0 |
+| indices | False | 4 | -560.379837 | False | 12 | -1212.0 |
+| control_flow | False | 4 | -571.739674 | False | 12 | -1212.0 |
+
+---
+
 Operator question: can the automath symbolic-math environment be improved so a
 small self-hosted LLM (or another approach) actually solves the math questions
 on a 2 vCPU / 3.8 GB no-swap box, and what is the best alternative approach?

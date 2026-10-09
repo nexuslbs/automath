@@ -36,8 +36,8 @@
       "primitive_steps": 3,
       "total_reward": 9960.319147,
       "goal_reached": true,
-      "total_wall_s": 1.251696,
-      "max_action_wall_s": 0.41075,
+      "total_wall_s": 1.069377,
+      "max_action_wall_s": 0.355992,
       "sub_second": false,
       "max_history_size": 3,
       "dropped_history": 0,
@@ -52,7 +52,7 @@
           "ok": true,
           "err": "none",
           "goal": true,
-          "wall_s": 0.41075,
+          "wall_s": 0.355992,
           "primitives": [
             {
               "primitive": 1,
@@ -97,33 +97,32 @@
       },
       "end_state": {
         "goal": true,
-        "cost": 1905021,
-        "history_amount": 5,
+        "cost": 1871855,
+        "history_amount": 3,
         "dropped_history": 0,
         "last_action_error": null
       },
-      "macro_steps": 2,
-      "primitive_steps": 5,
-      "total_reward": 9921.600221,
+      "macro_steps": 1,
+      "primitive_steps": 3,
+      "total_reward": 9960.318325,
       "goal_reached": true,
-      "total_wall_s": 0.894761,
-      "max_action_wall_s": 0.3716,
+      "total_wall_s": 0.365884,
+      "max_action_wall_s": 0.236703,
       "sub_second": true,
-      "max_history_size": 5,
+      "max_history_size": 3,
       "dropped_history": 0,
       "macro_actions_taken": [
-        "result_write_true",
         "result_true"
       ],
       "steps": [
         {
           "step": 1,
-          "macro": "result_write_true",
-          "reward": -38.681675,
+          "macro": "result_true",
+          "reward": 9960.318325,
           "ok": true,
           "err": "none",
-          "goal": false,
-          "wall_s": 0.200684,
+          "goal": true,
+          "wall_s": 0.236703,
           "primitives": [
             {
               "primitive": 1,
@@ -140,40 +139,13 @@
               "ok": true,
               "cost": 92770500,
               "goal": false
-            }
-          ]
-        },
-        {
-          "step": 2,
-          "macro": "result_true",
-          "reward": 9960.281896,
-          "ok": true,
-          "err": "none",
-          "goal": true,
-          "wall_s": 0.3716,
-          "primitives": [
-            {
-              "primitive": 1,
-              "action": "CreateScratch",
-              "reward": -19.354881,
-              "ok": true,
-              "cost": 93631850,
-              "goal": false
-            },
-            {
-              "primitive": 2,
-              "action": "DefineScratchFromInt",
-              "reward": -19.363223,
-              "ok": true,
-              "cost": 94416150,
-              "goal": false
             },
             {
               "primitive": 3,
               "action": "VerifyGoal",
               "reward": 9999.0,
               "ok": true,
-              "cost": 1905021,
+              "cost": 1871855,
               "goal": true
             }
           ]
@@ -195,33 +167,32 @@
       },
       "end_state": {
         "goal": true,
-        "cost": 1904262,
-        "history_amount": 5,
+        "cost": 1871096,
+        "history_amount": 3,
         "dropped_history": 0,
         "last_action_error": null
       },
-      "macro_steps": 2,
-      "primitive_steps": 5,
-      "total_reward": 9921.601851,
+      "macro_steps": 1,
+      "primitive_steps": 3,
+      "total_reward": 9960.319147,
       "goal_reached": true,
-      "total_wall_s": 0.813572,
-      "max_action_wall_s": 0.345029,
+      "total_wall_s": 0.396995,
+      "max_action_wall_s": 0.267851,
       "sub_second": true,
-      "max_history_size": 5,
+      "max_history_size": 3,
       "dropped_history": 0,
       "macro_actions_taken": [
-        "result_write_true",
         "result_true"
       ],
       "steps": [
         {
           "step": 1,
-          "macro": "result_write_true",
-          "reward": -38.680853,
+          "macro": "result_true",
+          "reward": 9960.319147,
           "ok": true,
           "err": "none",
-          "goal": false,
-          "wall_s": 0.182829,
+          "goal": true,
+          "wall_s": 0.267851,
           "primitives": [
             {
               "primitive": 1,
@@ -238,40 +209,13 @@
               "ok": true,
               "cost": 92732550,
               "goal": false
-            }
-          ]
-        },
-        {
-          "step": 2,
-          "macro": "result_true",
-          "reward": 9960.282704,
-          "ok": true,
-          "err": "none",
-          "goal": true,
-          "wall_s": 0.345029,
-          "primitives": [
-            {
-              "primitive": 1,
-              "action": "CreateScratch",
-              "reward": -19.354476,
-              "ok": true,
-              "cost": 93593900,
-              "goal": false
-            },
-            {
-              "primitive": 2,
-              "action": "DefineScratchFromInt",
-              "reward": -19.362821,
-              "ok": true,
-              "cost": 94378200,
-              "goal": false
             },
             {
               "primitive": 3,
               "action": "VerifyGoal",
               "reward": 9999.0,
               "ok": true,
-              "cost": 1904262,
+              "cost": 1871096,
               "goal": true
             }
           ]
@@ -293,33 +237,32 @@
       },
       "end_state": {
         "goal": true,
-        "cost": 1903756,
-        "history_amount": 5,
+        "cost": 1870590,
+        "history_amount": 3,
         "dropped_history": 0,
         "last_action_error": null
       },
-      "macro_steps": 2,
-      "primitive_steps": 5,
-      "total_reward": 9921.602938,
+      "macro_steps": 1,
+      "primitive_steps": 3,
+      "total_reward": 9960.319696,
       "goal_reached": true,
-      "total_wall_s": 0.83529,
-      "max_action_wall_s": 0.328236,
+      "total_wall_s": 0.412571,
+      "max_action_wall_s": 0.300459,
       "sub_second": true,
-      "max_history_size": 5,
+      "max_history_size": 3,
       "dropped_history": 0,
       "macro_actions_taken": [
-        "result_write_true",
         "result_true"
       ],
       "steps": [
         {
           "step": 1,
-          "macro": "result_write_true",
-          "reward": -38.680304,
+          "macro": "result_true",
+          "reward": 9960.319696,
           "ok": true,
           "err": "none",
-          "goal": false,
-          "wall_s": 0.160533,
+          "goal": true,
+          "wall_s": 0.300459,
           "primitives": [
             {
               "primitive": 1,
@@ -336,40 +279,13 @@
               "ok": true,
               "cost": 92707250,
               "goal": false
-            }
-          ]
-        },
-        {
-          "step": 2,
-          "macro": "result_true",
-          "reward": 9960.283242,
-          "ok": true,
-          "err": "none",
-          "goal": true,
-          "wall_s": 0.328236,
-          "primitives": [
-            {
-              "primitive": 1,
-              "action": "CreateScratch",
-              "reward": -19.354205,
-              "ok": true,
-              "cost": 93568600,
-              "goal": false
-            },
-            {
-              "primitive": 2,
-              "action": "DefineScratchFromInt",
-              "reward": -19.362553,
-              "ok": true,
-              "cost": 94352900,
-              "goal": false
             },
             {
               "primitive": 3,
               "action": "VerifyGoal",
               "reward": 9999.0,
               "ok": true,
-              "cost": 1903756,
+              "cost": 1870590,
               "goal": true
             }
           ]
@@ -405,15 +321,15 @@
       "primitive_steps": 12,
       "total_reward": -560.379837,
       "goal_reached": false,
-      "total_wall_s": 1.902683,
-      "max_action_wall_s": 0.305347,
+      "total_wall_s": 1.605795,
+      "max_action_wall_s": 0.277732,
       "sub_second": false,
       "max_history_size": 12,
       "dropped_history": 0,
       "macro_actions_taken": [
         "result_true",
         "result_true",
-        "result_false",
+        "result_true",
         "result_true"
       ],
       "steps": [
@@ -424,7 +340,7 @@
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.296781,
+          "wall_s": 0.21412,
           "primitives": [
             {
               "primitive": 1,
@@ -459,7 +375,7 @@
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.279023,
+          "wall_s": 0.270747,
           "primitives": [
             {
               "primitive": 1,
@@ -489,12 +405,12 @@
         },
         {
           "step": 3,
-          "macro": "result_false",
+          "macro": "result_true",
           "reward": -140.14603,
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.305347,
+          "wall_s": 0.255879,
           "primitives": [
             {
               "primitive": 1,
@@ -529,7 +445,7 @@
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.260871,
+          "wall_s": 0.277732,
           "primitives": [
             {
               "primitive": 1,
@@ -574,36 +490,40 @@
       },
       "end_state": {
         "goal": false,
-        "cost": 623671450,
+        "cost": 0,
         "history_amount": 12,
         "dropped_history": 0,
-        "last_action_error": null
+        "last_action_error": [
+          "VerifyGoal",
+          "BooleanExceptionInfo",
+          "BooleanExceptionInfo<39>{1}(Eq<126>{2}( IntBoolean<155>[1] Void<57>{0} ))",
+          12
+        ]
       },
-      "macro_steps": 5,
+      "macro_steps": 4,
       "primitive_steps": 12,
-      "total_reward": -491.990808,
+      "total_reward": -571.739674,
       "goal_reached": false,
-      "total_wall_s": 6.792219,
-      "max_action_wall_s": 1.153595,
+      "total_wall_s": 4.55295,
+      "max_action_wall_s": 1.071339,
       "sub_second": false,
       "max_history_size": 12,
       "dropped_history": 0,
       "macro_actions_taken": [
-        "result_false",
-        "result_false",
         "result_true",
-        "result_write_true",
+        "result_true",
+        "result_true",
         "result_true"
       ],
       "steps": [
         {
           "step": 1,
-          "macro": "result_false",
+          "macro": "result_true",
           "reward": -142.44173,
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.567878,
+          "wall_s": 0.379864,
           "primitives": [
             {
               "primitive": 1,
@@ -633,12 +553,12 @@
         },
         {
           "step": 2,
-          "macro": "result_false",
+          "macro": "result_true",
           "reward": -142.804674,
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.933847,
+          "wall_s": 0.574663,
           "primitives": [
             {
               "primitive": 1,
@@ -673,7 +593,7 @@
           "ok": false,
           "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 0.737466,
+          "wall_s": 0.980121,
           "primitives": [
             {
               "primitive": 1,
@@ -703,12 +623,12 @@
         },
         {
           "step": 4,
-          "macro": "result_write_true",
-          "reward": -42.380241,
-          "ok": true,
-          "err": "none",
+          "macro": "result_true",
+          "reward": -143.380241,
+          "ok": false,
+          "err": "BooleanExceptionInfo",
           "goal": false,
-          "wall_s": 1.153595,
+          "wall_s": 1.071339,
           "primitives": [
             {
               "primitive": 1,
@@ -725,29 +645,1699 @@
               "ok": true,
               "cost": 599116650,
               "goal": false
-            }
-          ]
-        },
-        {
-          "step": 5,
-          "macro": "result_true",
-          "reward": -21.251134,
-          "ok": true,
-          "err": "none",
-          "goal": false,
-          "wall_s": 0.529722,
-          "primitives": [
+            },
             {
-              "primitive": 1,
-              "action": "CreateScratch",
-              "reward": -21.251134,
-              "ok": true,
-              "cost": 623671450,
+              "primitive": 3,
+              "action": "VerifyGoal",
+              "reward": -101.0,
+              "ok": false,
+              "cost": 0,
               "goal": false
             }
           ]
         }
       ]
     }
-  ]
+  ],
+  "untrained_baseline": {
+    "model": "<fresh random init, same constructor/seed/max-steps>",
+    "seed": 1,
+    "max_steps": 12,
+    "cases": [
+      {
+        "case": "binary_int",
+        "goal_type": "HaveResultScratch",
+        "goal_detail": "Eq[BinaryInt]",
+        "goal_symbol": "HaveResultScratch<336>{2}( Eq<126>{2}( BinaryInt<87>{1}(IntBoolean<155>[0]) BinaryInt<87>{1}(IntBoolean<155>[0]) ) TypeNode<226>[StateScratchIndex<200>] )",
+        "action_space_size": 4,
+        "start_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 0,
+          "dropped_history": 0,
+          "last_action_error": null
+        },
+        "end_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 12,
+          "dropped_history": 0,
+          "last_action_error": [
+            "VerifyGoal",
+            "BooleanExceptionInfo",
+            "BooleanExceptionInfo<39>{1}(IsEmpty<139>{1}(Optional<44>{0}))",
+            12
+          ]
+        },
+        "macro_steps": 12,
+        "primitive_steps": 12,
+        "total_reward": -1212.0,
+        "goal_reached": false,
+        "total_wall_s": 1.56891,
+        "max_action_wall_s": 0.035982,
+        "sub_second": false,
+        "max_history_size": 12,
+        "dropped_history": 0,
+        "macro_actions_taken": [
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check"
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.016831,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.023839,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.035982,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.026058,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 5,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.023627,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 6,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.033314,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 7,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.017849,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 8,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.018435,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 9,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.022251,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 10,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.031369,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 11,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.020623,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 12,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.015304,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "case": "signed_int",
+        "goal_type": "HaveResultScratch",
+        "goal_detail": "Eq[SignedInt]",
+        "goal_symbol": "HaveResultScratch<336>{2}( Eq<126>{2}( SignedInt<88>{2}( NegativeSign<151>{1}(IntBoolean<155>[0]) BinaryInt<87>{1}(IntBoolean<155>[0]) ) BinaryInt<87>{1}(IntBoolean<155>[0]) ) TypeNode<226>[StateScratchIndex<200>] )",
+        "action_space_size": 4,
+        "start_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 0,
+          "dropped_history": 0,
+          "last_action_error": null
+        },
+        "end_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 12,
+          "dropped_history": 0,
+          "last_action_error": [
+            "VerifyGoal",
+            "BooleanExceptionInfo",
+            "BooleanExceptionInfo<39>{1}(IsEmpty<139>{1}(Optional<44>{0}))",
+            12
+          ]
+        },
+        "macro_steps": 12,
+        "primitive_steps": 12,
+        "total_reward": -1212.0,
+        "goal_reached": false,
+        "total_wall_s": 1.360624,
+        "max_action_wall_s": 0.02943,
+        "sub_second": false,
+        "max_history_size": 12,
+        "dropped_history": 0,
+        "macro_actions_taken": [
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check"
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.018695,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.018542,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013426,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.01643,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 5,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.020458,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 6,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.02943,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 7,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.026177,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 8,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.01902,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 9,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.020462,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 10,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.021549,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 11,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.012616,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 12,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013407,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "case": "int_to_binary",
+        "goal_type": "HaveResultScratch",
+        "goal_detail": "Eq[IntToBinary]",
+        "goal_symbol": "HaveResultScratch<336>{2}( Eq<126>{2}( IntToBinary<94>{1}(Integer<157>[0]) BinaryInt<87>{1}(IntBoolean<155>[0]) ) TypeNode<226>[StateScratchIndex<200>] )",
+        "action_space_size": 4,
+        "start_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 0,
+          "dropped_history": 0,
+          "last_action_error": null
+        },
+        "end_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 12,
+          "dropped_history": 0,
+          "last_action_error": [
+            "VerifyGoal",
+            "BooleanExceptionInfo",
+            "BooleanExceptionInfo<39>{1}(IsEmpty<139>{1}(Optional<44>{0}))",
+            12
+          ]
+        },
+        "macro_steps": 12,
+        "primitive_steps": 12,
+        "total_reward": -1212.0,
+        "goal_reached": false,
+        "total_wall_s": 1.464499,
+        "max_action_wall_s": 0.034119,
+        "sub_second": false,
+        "max_history_size": 12,
+        "dropped_history": 0,
+        "macro_actions_taken": [
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check"
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.017928,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.018207,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.027373,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.020539,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 5,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.034119,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 6,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.024079,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 7,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.015532,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 8,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.020602,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 9,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.01585,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 10,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.019917,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 11,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.023907,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 12,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.026378,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "case": "boolean_lt",
+        "goal_type": "HaveResultScratch",
+        "goal_detail": "LessThan(Integer,Integer)",
+        "goal_symbol": "HaveResultScratch<336>{2}( LessThan<133>{2}( Integer<157>[1] Integer<157>[2] ) TypeNode<226>[StateScratchIndex<200>] )",
+        "action_space_size": 4,
+        "start_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 0,
+          "dropped_history": 0,
+          "last_action_error": null
+        },
+        "end_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 12,
+          "dropped_history": 0,
+          "last_action_error": [
+            "VerifyGoal",
+            "BooleanExceptionInfo",
+            "BooleanExceptionInfo<39>{1}(IsEmpty<139>{1}(Optional<44>{0}))",
+            12
+          ]
+        },
+        "macro_steps": 12,
+        "primitive_steps": 12,
+        "total_reward": -1212.0,
+        "goal_reached": false,
+        "total_wall_s": 1.217359,
+        "max_action_wall_s": 0.034889,
+        "sub_second": false,
+        "max_history_size": 12,
+        "dropped_history": 0,
+        "macro_actions_taken": [
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check"
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.029185,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013297,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.019754,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.023847,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 5,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.018713,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 6,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013009,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 7,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013557,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 8,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.0138,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 9,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.014977,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 10,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.014398,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 11,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.034889,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 12,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013133,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "case": "indices",
+        "goal_type": "HaveScratch",
+        "goal_detail": "Void (index/args-group initial state)",
+        "goal_symbol": "HaveScratch<337>{2}( Void<57>{0} TypeNode<226>[StateScratchIndex<200>] )",
+        "action_space_size": 4,
+        "start_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 0,
+          "dropped_history": 0,
+          "last_action_error": null
+        },
+        "end_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 12,
+          "dropped_history": 0,
+          "last_action_error": [
+            "VerifyGoal",
+            "BooleanExceptionInfo",
+            "BooleanExceptionInfo<39>{1}(Eq<126>{2}( And<135>{2}( Void<57>{0} Void<57>{0} ) Void<57>{0} ))",
+            12
+          ]
+        },
+        "macro_steps": 12,
+        "primitive_steps": 12,
+        "total_reward": -1212.0,
+        "goal_reached": false,
+        "total_wall_s": 1.400624,
+        "max_action_wall_s": 0.027975,
+        "sub_second": false,
+        "max_history_size": 12,
+        "dropped_history": 0,
+        "macro_actions_taken": [
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check"
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.016303,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.015888,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.027975,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.015386,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 5,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013305,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 6,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.015336,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 7,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013691,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 8,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.017132,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 9,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.014363,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 10,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013804,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 11,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.017494,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 12,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.014515,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "case": "control_flow",
+        "goal_type": "HaveScratch",
+        "goal_detail": "Void (If/Loop/function initial state)",
+        "goal_symbol": "HaveScratch<337>{2}( Void<57>{0} TypeNode<226>[StateScratchIndex<200>] )",
+        "action_space_size": 4,
+        "start_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 0,
+          "dropped_history": 0,
+          "last_action_error": null
+        },
+        "end_state": {
+          "goal": false,
+          "cost": 0,
+          "history_amount": 12,
+          "dropped_history": 0,
+          "last_action_error": [
+            "VerifyGoal",
+            "BooleanExceptionInfo",
+            "BooleanExceptionInfo<39>{1}(Eq<126>{2}( If<102>{3}( IntBoolean<155>[1] Integer<157>[1] IntGroup<239>{2}( Integer<157>[2] Integer<157>[3] ) ) Void<57>{0} ))",
+            12
+          ]
+        },
+        "macro_steps": 12,
+        "primitive_steps": 12,
+        "total_reward": -1212.0,
+        "goal_reached": false,
+        "total_wall_s": 3.954166,
+        "max_action_wall_s": 0.030822,
+        "sub_second": false,
+        "max_history_size": 12,
+        "dropped_history": 0,
+        "macro_actions_taken": [
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check",
+          "result_check"
+        ],
+        "steps": [
+          {
+            "step": 1,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.016867,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 2,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.023612,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 3,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.012688,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 4,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.030822,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 5,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.023759,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 6,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.014788,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 7,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.017029,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 8,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.013078,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 9,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.016235,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 10,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.02169,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 11,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.028619,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          },
+          {
+            "step": 12,
+            "macro": "result_check",
+            "reward": -101.0,
+            "ok": false,
+            "err": "BooleanExceptionInfo",
+            "goal": false,
+            "wall_s": 0.01647,
+            "primitives": [
+              {
+                "primitive": 1,
+                "action": "VerifyGoal",
+                "reward": -101.0,
+                "ok": false,
+                "cost": 0,
+                "goal": false
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

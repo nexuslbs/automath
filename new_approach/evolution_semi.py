@@ -517,7 +517,10 @@ def train_shaped(agent: EvolutionAgent, cases: Sequence, episodes: int,
     for ep in range(max(1, episodes)):
         epsilon = agent._epsilon(ep)
         for case in cases:
-            target = case.env.goal.target
+            # FixedStateGoal cases have a single target tree to shape toward.
+            # ExprGoal cases have no single target; they keep the plain
+            # step-cost + goal signal only (documented as such).
+            target = getattr(case.env.goal, "target", None)
             shaper = EpisodeShaper(rcfg)
             state = case.env.reset()
             trajectory: List[Tuple[str, float, float, str]] = []
@@ -528,9 +531,14 @@ def train_shaped(agent: EvolutionAgent, cases: Sequence, episodes: int,
                 action = agent.epsilon_greedy(case.key, state, epsilon)
                 nxt = case.env.step(state, action)
                 reached = case.env.goal_achieved(nxt)
-                rb = shaper.reward(target, state, nxt, reached)
-                td = agent.learn(case.key, state, action, rb.total, nxt, reached)
-                trajectory.append((action, rb.total, td, ctx))
+                if target is not None:
+                    rb = shaper.reward(target, state, nxt, reached)
+                    reward = rb.total
+                else:
+                    reward = (rcfg.step_cost
+                              + (rcfg.goal_reward if reached else 0.0))
+                td = agent.learn(case.key, state, action, reward, nxt, reached)
+                trajectory.append((action, reward, td, ctx))
                 state = nxt
                 if reached:
                     break

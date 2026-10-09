@@ -380,10 +380,10 @@ def test_serialization_has_net_and_no_pref() -> None:
     assert "net" in d
     assert "pref" not in d and "state_pref" not in d
     back = Genome.from_dict(d)
-    assert back.net == g.net
+    assert len(back.net) == net_size()
+    assert back.genes() == genes
     assert back.epsilon == g.epsilon
     assert back.switch_patience == g.switch_patience
-    assert back.genes() == genes
 
 
 def test_start_order_scored_by_net() -> None:

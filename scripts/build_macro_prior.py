@@ -120,6 +120,11 @@ def _call(base_url, model, prompt, max_tokens, temperature, timeout):
         'messages': [{'role': 'user', 'content': prompt}],
         'temperature': temperature,
         'max_tokens': max_tokens,
+        # MiniCPM5 is a reasoning model: without this the whole token budget is
+        # spent inside <think> and `content` comes back empty. The chat template
+        # (checked via GET /props) reads `enable_thinking`.
+        'chat_template_kwargs': {'enable_thinking': False},
+        'response_format': {'type': 'json_object'},
     }).encode('utf-8')
     request = urllib.request.Request(
         url, data=payload, headers={'Content-Type': 'application/json'})
@@ -296,6 +301,8 @@ def main(argv=None) -> int:
         'base_url': args.base_url,
         'temperature': args.temperature,
         'max_tokens': args.max_tokens,
+        'chat_template_kwargs': {'enable_thinking': False},
+        'response_format': {'type': 'json_object'},
         'max_calls': args.max_calls,
         'calls_used': len(calls),
         'accepted_count': len(accepted),

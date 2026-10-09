@@ -447,3 +447,35 @@ default so the flag is optional. The offline LLM proposal pass is the NEXT unit.
 
 Action-space size on the binary_int case: 4 macro-actions vs 22 in the curated
 `ESSENTIAL_ACTIONS` set (34 basic actions in the full catalogue).
+
+## 8. U4 option C: offline LLM macro-action prior protocol
+
+Option C keeps the small self-hosted LLM OFFLINE, outside the training loop, as
+a MACRO-ACTION PRIOR.
+
+**What the LLM gets.** For each requested candidate: the goal family name, the
+exact allowed PRIMITIVE action catalogue for that family (the subset of
+`env/node_types.py` `ESSENTIAL_ACTIONS` that the concrete environment permits),
+the allowed `from_int:<TypeName>` argument tokens, and the exact JSON schema for
+one macro-action:
+`{"name": str, "steps": [{"action": <primitive name>, "args": [int,int,int]}, ...]}`.
+One model call per candidate with temperature 0 and `max_tokens` <= 256, total
+budget <= 12 calls (`scripts/build_macro_prior.py`).
+
+**What it must return.** Exactly one JSON object of that shape.
+
+**How candidates are validated.** `scripts/build_macro_prior.py` extracts the
+first `{...}` block and drops a candidate unless: the top level is an object
+with a non-empty `name` and a non-empty `steps` list; every step names an action
+both in `ESSENTIAL_ACTIONS` and in the environment's allowed basic-action group;
+every `args` is a list of exactly three ints (or a `from_int:<TypeName>` token
+present in the environment's from-int group); and the candidate actually expands
+through `MacroActionEnv.expand` for that family's registry case. Every
+accept/reject with its reason is recorded in the artifact.
+
+**How candidates enter the RL loop.** Accepted candidates are written to
+`prior/macro_prior_<model>.json` together with the per-call raw response,
+latency and prompt/completion token counts. `scripts/run_case.py --macro-prior
+<file>` loads them via `env.macro_action.catalogue_from_json` and they REPLACE
+the built-in catalogue as the agent's selection space. The training loop itself
+uses NO LLM and NO network: it only selects over the frozen JSON catalogue.

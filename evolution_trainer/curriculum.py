@@ -489,7 +489,7 @@ def stage_s4(spec_id: str, out_dir: str, generations: int = 1500,
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Unit D-1 curriculum runner")
     parser.add_argument("--stage", default="all",
-                        choices=["s1", "s2", "s3", "s4", "all"])
+                        choices=["s1", "s2", "s3", "s4", "graceful", "all"])
     parser.add_argument("--spec", default="spec_multi_step")
     parser.add_argument("--out", default="out/curriculum")
     parser.add_argument("--generations", type=int, default=1500)
@@ -508,6 +508,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--val-seed", type=int, default=20261010)
     parser.add_argument("--val-pool-size", type=int, default=64)
     parser.add_argument("--mask-illegal", action="store_true")
+    # task 4349 unit 3: graceful unsolvable handling. Default ON with a
+    # documented OFF switch; --stage graceful runs the bounded ON/OFF
+    # measurement over --graceful-family.
+    parser.add_argument("--graceful-unsolvable", dest="graceful_unsolvable",
+                        action="store_true", default=True)
+    parser.add_argument("--no-graceful-unsolvable", dest="graceful_unsolvable",
+                        action="store_false")
+    parser.add_argument("--graceful-family", default="dense")
+    parser.add_argument("--graceful-generations", type=int, default=2)
+    parser.add_argument("--graceful-step-budget", type=int, default=40)
+    parser.add_argument("--graceful-node-budget", type=int, default=20000)
+    parser.add_argument("--graceful-time-budget", type=float, default=1.5)
+    parser.add_argument("--graceful-limit", type=int, default=0)
     args = parser.parse_args(argv)
 
     selection: Optional[Dict[str, Any]] = None
@@ -522,14 +535,44 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "val_seed": args.val_seed,
             "val_pool_size": args.val_pool_size,
             "mask_illegal": args.mask_illegal,
+            "graceful_unsolvable": args.graceful_unsolvable,
         }
 
     os.makedirs(args.out, exist_ok=True)
-    stages = ["s1", "s2", "s3"] if args.stage == "all" else [args.stage]
+    stages = (["s1", "s2", "s3"] if args.stage == "all" else [args.stage])
     results: Dict[str, Any] = {}
     for stage in stages:
         started = time.perf_counter()
-        if stage == "s1":
+        if stage == "graceful":
+            from . import graceful as graceful_mod
+            cases = graceful_mod.FAMILIES[args.graceful_family]()
+            if args.graceful_limit:
+                cases = cases[: args.graceful_limit]
+            off = graceful_mod.training_run(
+                cases, enabled=False, action_set="current",
+                node_budget=args.graceful_node_budget,
+                time_budget=args.graceful_time_budget,
+                generations=args.graceful_generations,
+                step_budget=args.graceful_step_budget)
+            on = graceful_mod.training_run(
+                cases, enabled=True, action_set="current",
+                node_budget=args.graceful_node_budget,
+                time_budget=args.graceful_time_budget,
+                generations=args.graceful_generations,
+                step_budget=args.graceful_step_budget)
+            payload = {
+                "stage": "graceful",
+                "family": args.graceful_family,
+                "graceful_unsolvable": args.graceful_unsolvable,
+                "off": off,
+                "on": on,
+                "budget_seconds_saved": round(
+                    off["wall_seconds"] - on["wall_seconds"], 6),
+                "three_way": graceful_mod.three_way(
+                    cases, "current", args.graceful_node_budget,
+                    args.graceful_time_budget, args.graceful_step_budget),
+            }
+        elif stage == "s1":
             payload = stage_s1(args.out, seed=args.seed)
         elif stage == "s2":
             payload = stage_s2(args.out, seed=args.seed)

@@ -618,6 +618,16 @@ def evaluate_validation(net, genome: Sequence[float], cfg: Any, generation: int,
     episode from its own start state (with masking when the config enables it).
     """
     cases = validation_batch(cfg, generation)
+    # task 4349 unit 3: graceful unsolvable handling. Provably-unsolvable
+    # val forms are excluded before they burn a rollout. The held-out pool is
+    # solvable-only by construction (val64 = 0 excluded), so this is a no-op
+    # for the 4344 selection pipeline; the OFF switch restores it exactly.
+    if bool(getattr(cfg, "graceful_unsolvable", False)):
+        from .graceful import filter_unsolvable
+        cases, _excluded, _records = filter_unsolvable(
+            cases, "current",
+            node_budget=int(getattr(cfg, "graceful_node_budget", 20000)),
+            time_budget=float(getattr(cfg, "graceful_time_budget", 1.5)))
     solved = 0
     names: List[str] = []
     for index, case in enumerate(cases):

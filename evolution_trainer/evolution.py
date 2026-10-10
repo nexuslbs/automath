@@ -93,6 +93,11 @@ class EvoConfig:
     val_seed: int = 20261010
     val_pool_size: int = 64
     mask_illegal: bool = False
+    # task 4349 unit 3: graceful unsolvable handling. Default ON; the
+    # documented OFF switch (graceful_unsolvable=False) restores the previous
+    # behaviour exactly. The held-out val pool (val64) has 0 provably-unsolvable
+    # forms, so ON changes no 4344 selection number.
+    graceful_unsolvable: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

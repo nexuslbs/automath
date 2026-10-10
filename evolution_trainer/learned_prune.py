@@ -804,9 +804,22 @@ def learned_prune(env: DynamicEnv, state: State, actions: Sequence[Action],
     """
     if net is None:
         return tuple(actions)
+    # Share the state block and the per-node rows across every candidate action:
+    # ``state_action_features`` rebuilds both for each action, which made the
+    # learned mask the dominant cost of an episode. The pair encoding and the
+    # threshold test are byte-for-byte the same as before.
+    rows = _node_rows(env, state)
+    left = _state_vector(env, state, rows)
     kept: List[Action] = []
     for action in actions:
-        value = net.predict(state_action_features(env, state, action))
+        mid = _action_vector(env, state, action, rows)
+        try:
+            nxt, _info = _step_internal(env.spec, state, action)
+        except Exception:
+            nxt = None
+        right = ([0.0] * STATE_DIM if nxt is None
+                 else _state_vector(env, nxt))
+        value = net.predict(left + mid + right)
         if value >= threshold:
             kept.append(action)
     return tuple(kept)
@@ -891,7 +904,8 @@ def run_all_modes(spec_id: str = "spec_multi_step", episodes: int = 30,
                   generation: int = 0,
                   selection_seed: int = sel.SELECTION_SEED,
                   epsilon: float = sel.SELECTION_EPSILON,
-                  genome_seed: int = 7, checkpoint: Optional[str] = None
+                  genome_seed: int = 7, checkpoint: Optional[str] = None,
+                  max_steps: Optional[int] = None
                   ) -> Dict[str, Dict[str, Any]]:
     """The three-mode harness (hand / learned / none) on the same episodes."""
     net = load_checkpoint(checkpoint)
@@ -901,7 +915,7 @@ def run_all_modes(spec_id: str = "spec_multi_step", episodes: int = 30,
                                  generation=generation,
                                  selection_seed=selection_seed,
                                  epsilon=epsilon, genome_seed=genome_seed,
-                                 net=net)
+                                 net=net, max_steps=max_steps)
     return out
 
 

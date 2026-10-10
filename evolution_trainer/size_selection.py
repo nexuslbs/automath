@@ -45,6 +45,8 @@ Pure standard library, bounded, deterministic.
 
 from __future__ import annotations
 
+import copy
+import json
 import os
 import random
 import statistics
@@ -58,7 +60,7 @@ from dynamic_env.engine import (
     _step_internal,
     bfs_minimal_word,
 )
-from dynamic_env.spec import Spec, load_spec
+from dynamic_env.spec import Spec, load_spec, spec_from_dict
 
 # --------------------------------------------------------------------------
 # Constants (verbatim from the task / the gen-fitness add_a work)
@@ -97,6 +99,53 @@ FORBIDDEN_CATEGORIES: Dict[str, Tuple[str, ...]] = {
     "overlap_ext114": ("spec_multi_step", "spec_dynamic_axiom"),
     "overlap_dense_train": ("spec_dynamic_group",),
 }
+
+# --------------------------------------------------------------------------
+# TARGET-CHANGE family (held-out TARGETS)
+# --------------------------------------------------------------------------
+# The original fix#2 pool varied only the START STATE of a fixed set of specs,
+# so the val term measured start-state generalization, never TARGET
+# generalization. This family adds a distribution of held-out TARGETS: each
+# case is a fresh ``spec_multi_step`` prototype whose guard TARGET value is
+# perturbed away from the training target, mirroring the ``perturb_multi_step``
+# sweep in ``evolution_trainer/heldout_eval.py`` (three re-valued numeric nodes,
+# one combine op, one objective set). Every case is PROVEN solvable by replaying
+# its BFS witness before it enters the pool.
+
+#: How many target-change cases the pool carries (of ``POOL_SIZE``).
+TARGET_VARIANT_COUNT = 16
+#: The explicit seed of the target-change family (independent of ``VAL_SEED``).
+TARGET_VARIANT_SEED = 20261011
+#: The fresh spec-id namespace of a target variant.
+TARGET_VARIANT_PREFIX = "spec_multi_step_target_"
+#: The training spec's guard target: a held-out TARGET must not reproduce it.
+TRAIN_TARGET_VALUES: Tuple[int, ...] = (4,)
+#: The shipped held-out-EVAL spec's guard target (informational; the eval spec
+#: is kept out of the pool by spec id + state form, not by target value).
+HELDOUT_EVAL_TARGET_VALUES: Tuple[int, ...] = (8,)
+#: The anchor case of the family: the "multi_step target-8 held-out case" motif
+#: with a FRESH node namespace, so it is not a copy of spec_multi_step_heldout.
+TARGET_VARIANT_ANCHOR: Dict[str, Any] = {
+    "namespace": ("a9", "a5", "a3"),
+    "values": (9, 5, 3),
+    "target": 8,
+}
+#: Node namespaces used by the family. All are FRESH (never the training
+#: ``n9,n5,n3`` ids nor the held-out eval ids), so a variant state is a
+#: genuinely new state form even before the spec-id disjointness key is applied.
+_TARGET_NAMESPACES: Tuple[Tuple[str, ...], ...] = (
+    ("a9", "a5", "a3"),
+    ("m9", "m5", "m3"),
+    ("p9", "p5", "p3"),
+)
+#: Value triples mirrored from the ``perturb_multi_step`` sweep.
+_TARGET_VALUE_POOL: Tuple[Tuple[int, ...], ...] = (
+    (9, 5, 3), (7, 2, 1), (8, 4, 2), (6, 5, 1),
+    (9, 4, 1), (8, 3, 2), (7, 4, 3), (9, 6, 2),
+)
+
+#: The marker ``assert_disjoint`` returns on success (evidence convention).
+ASSERT_DISJOINT_OK = "ASSERT_DISJOINT_OK"
 
 
 # --------------------------------------------------------------------------
@@ -487,6 +536,149 @@ def _prefix_candidates(infos):
             yield _make_case(spec, states[k], witness, name, "prefix")
 
 
+# --------------------------------------------------------------------------
+# Fix 2 (extension): the TARGET-CHANGE family (held-out TARGETS)
+# --------------------------------------------------------------------------
+
+def _achievable_targets(values: Sequence[int]) -> List[int]:
+    """Non-negative guard targets reachable by ONE combine op on ``values``.
+
+    Mirrors the achievable-set construction of the ``perturb_multi_step`` sweep
+    (``evolution_trainer/heldout_eval.py``): the engine's ``sub`` primitive
+    clamps at 0, so only non-negative differences are reachable.
+    """
+    out: Set[int] = set()
+    size = len(values)
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                continue
+            a, b = int(values[i]), int(values[j])
+            out.add(a + b)
+            out.add(max(a - b, 0))
+            out.add(a * b)
+    return sorted(v for v in out if v > 0)
+
+
+def _load_raw_spec(spec_id: str) -> Dict[str, Any]:
+    with open(_spec_path(spec_id), "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _target_variant_raw(index: int, namespace: Sequence[str],
+                        values: Sequence[int],
+                        target: int) -> Dict[str, Any]:
+    """One fresh ``spec_multi_step`` prototype with a perturbed TARGET."""
+    raw = copy.deepcopy(_load_raw_spec("spec_multi_step"))
+    old_ids = ("n9", "n5", "n3")
+    new_nodes: Dict[str, Any] = {}
+    for old, new, num in zip(old_ids, namespace, values):
+        node = raw["nodes"].pop(old)
+        node["n"] = int(num)
+        new_nodes[new] = node
+    for node_id, node in raw["nodes"].items():
+        new_nodes[node_id] = node
+    raw["nodes"] = new_nodes
+    raw["guards"]["o"]["value"] = int(target)
+    raw["spec_id"] = "%s%02d" % (TARGET_VARIANT_PREFIX, int(index))
+    raw["description"] = (
+        "HELDOUT-TARGET variant %d of spec_multi_step: target=%d, ids=%s, "
+        "values=%s" % (int(index), int(target), tuple(namespace),
+                       tuple(int(v) for v in values)))
+    return raw
+
+
+def _target_case(index: int, namespace: Sequence[str], values: Sequence[int],
+                 target: int) -> Optional[ValCase]:
+    """Build one target-change case, PROVEN solvable by replaying its witness."""
+    raw = _target_variant_raw(index, namespace, values, target)
+    wide = spec_from_dict(raw)
+    # Every target here is achievable in exactly two actions (one build/combine
+    # of the target value, then one objective set); the depth cap keeps BFS
+    # bounded even if a value were unreachable.
+    word = bfs_minimal_word(wide, max_depth=3)
+    if not word:
+        return None
+    raw["max_steps"] = len(word) + 2
+    spec = spec_from_dict(raw)
+    env = DynamicEnv(spec)
+    state = env.reset()
+    final = _replay(env, state, word)
+    if final is None or not env.goal_reached(final):
+        return None
+    name = "val_%s_t%d" % (spec.spec_id, int(target))
+    return _make_case(spec, state, word, name, "target")
+
+
+def target_change_cases(count: int = TARGET_VARIANT_COUNT,
+                        seed: int = TARGET_VARIANT_SEED) -> List[ValCase]:
+    """The held-out TARGET-change family (deterministic, proven solvable).
+
+    The first case is the fixed target-8 anchor (``TARGET_VARIANT_ANCHOR``);
+    the rest draw a namespace, a value triple and an achievable target from the
+    ``TARGET_VARIANT_SEED`` RNG. A variant that reproduces the training target
+    (``TRAIN_TARGET_VALUES``) or the shipped held-out eval spec is skipped.
+    """
+    count = max(1, int(count))
+    rng = random.Random(int(seed))
+    anchor = (tuple(TARGET_VARIANT_ANCHOR["namespace"]),
+              tuple(int(v) for v in TARGET_VARIANT_ANCHOR["values"]),
+              int(TARGET_VARIANT_ANCHOR["target"]))
+    planned: List[Tuple[Tuple[str, ...], Tuple[int, ...], int]] = [anchor]
+    seen: Set[Tuple[Tuple[str, ...], Tuple[int, ...], int]] = {anchor}
+    guard = 0
+    while len(planned) < count and guard < count * 200:
+        guard += 1
+        namespace = _TARGET_NAMESPACES[len(planned) % len(_TARGET_NAMESPACES)]
+        values = list(rng.choice(_TARGET_VALUE_POOL))
+        rng.shuffle(values)
+        choices = [v for v in _achievable_targets(values)
+                   if v not in TRAIN_TARGET_VALUES]
+        if not choices:
+            continue
+        target = int(rng.choice(choices))
+        key = (tuple(namespace), tuple(int(v) for v in values), target)
+        if key in seen:
+            continue
+        if (tuple(namespace) == ("n9", "n5", "n3")
+                and target in HELDOUT_EVAL_TARGET_VALUES):
+            continue
+        seen.add(key)
+        planned.append(key)
+    cases: List[ValCase] = []
+    for index, (namespace, values, target) in enumerate(planned):
+        case = _target_case(index, namespace, values, target)
+        if case is not None:
+            cases.append(case)
+    return cases
+
+
+def replay_witness(case: ValCase) -> bool:
+    """Replay ``case.witness`` from ``case.start_state``; True iff goal reached.
+
+    This is the solvability PROOF used for every pool case (target-change and
+    start-state families alike), not a planner claim.
+    """
+    env = DynamicEnv(case.spec)
+    state = case.start_state
+    for key in case.witness:
+        match = next((a for a in env.legal_actions(state) if a.key() == key),
+                     None)
+        if match is None:
+            return False
+        state = env.step(state, match).state
+    return bool(env.goal_reached(state))
+
+
+def case_target_value(case: ValCase) -> Optional[int]:
+    """The guard TARGET value of a case's spec (``None`` when unguarded)."""
+    guard = case.spec.guards.get("o")
+    if guard is None:
+        return None
+    value = guard.get("value")
+    return None if value is None else int(value)
+
+
 def _forbidden_forms() -> Dict[str, Set[str]]:
     """Canonical-path forms forbidden to the pool, per report category."""
     categories: Dict[str, Set[str]] = {}
@@ -518,9 +710,12 @@ def validation_pool(pool_size: int = POOL_SIZE,
                     seed: int = VAL_SEED) -> List[ValCase]:
     """The held-out validation pool (cached, disjoint by construction).
 
-    A candidate is dropped when its ``(spec_id, start_state identity)`` is a
-    forbidden canonical-path form of any category, so disjointness holds by
-    construction and is re-asserted by :func:`assert_disjoint`.
+    The pool is the TARGET-CHANGE family FIRST (``TARGET_VARIANT_COUNT`` cases,
+    each proven solvable by replaying its BFS witness), then the unchanged
+    fresh-random intermediate stacks up to ``pool_size``. A candidate is dropped
+    when its ``(spec_id, start_state identity)`` is a forbidden canonical-path
+    form of any category, so disjointness holds by construction and is
+    re-asserted by :func:`assert_disjoint`.
     """
     global _POOL_CACHE
     if _POOL_CACHE is not None and len(_POOL_CACHE) == int(pool_size):
@@ -529,11 +724,11 @@ def validation_pool(pool_size: int = POOL_SIZE,
     forbidden: Set[str] = set()
     for forms in categories.values():
         forbidden |= forms
-    rng = random.Random(seed)
     seen: Set[str] = set()
     cases: List[ValCase] = []
-    stream = _candidate_stream(rng, tuple(TRAIN_SPEC_IDS) + tuple(HELDOUT_SPEC_IDS))
-    for case in stream:
+    # 1. held-out TARGETS: the target-change family leads the pool, so the
+    #    per-generation batch always can (and usually does) draw it.
+    for case in target_change_cases():
         key = case.form_key()
         if key in forbidden or key in seen:
             continue
@@ -541,6 +736,19 @@ def validation_pool(pool_size: int = POOL_SIZE,
         cases.append(case)
         if len(cases) >= int(pool_size):
             break
+    # 2. fill the rest with the (unchanged) fresh random intermediate stacks.
+    if len(cases) < int(pool_size):
+        rng = random.Random(seed)
+        stream = _candidate_stream(
+            rng, tuple(TRAIN_SPEC_IDS) + tuple(HELDOUT_SPEC_IDS))
+        for case in stream:
+            key = case.form_key()
+            if key in forbidden or key in seen:
+                continue
+            seen.add(key)
+            cases.append(case)
+            if len(cases) >= int(pool_size):
+                break
     if len(cases) < int(pool_size):
         raise RuntimeError(
             "validation pool too small: %d < %d (disjoint solvable candidates "
@@ -550,8 +758,12 @@ def validation_pool(pool_size: int = POOL_SIZE,
     return cases
 
 
-def assert_disjoint(cases: Optional[Sequence[ValCase]] = None) -> None:
-    """Raise ``AssertionError`` if any pool form is a forbidden form."""
+def assert_disjoint(cases: Optional[Sequence[ValCase]] = None) -> str:
+    """Raise ``AssertionError`` if any pool form/target is forbidden.
+
+    Returns :data:`ASSERT_DISJOINT_OK` on success so evidence scripts can print
+    the marker directly.
+    """
     if cases is None:
         cases = validation_pool()
     forbidden: Set[str] = set()
@@ -560,6 +772,13 @@ def assert_disjoint(cases: Optional[Sequence[ValCase]] = None) -> None:
     for case in cases:
         if case.form_key() in forbidden:
             raise AssertionError("validation form collides: " + case.form_key())
+        if case.domain == "target":
+            value = case_target_value(case)
+            if value is not None and value in TRAIN_TARGET_VALUES:
+                raise AssertionError(
+                    "validation target collides with a training target: %r"
+                    % value)
+    return ASSERT_DISJOINT_OK
 
 
 def validation_batch(cfg: Any, generation: int,
@@ -579,9 +798,20 @@ def validation_batch(cfg: Any, generation: int,
 
 
 def disjointness_report(pool_size: int = POOL_SIZE) -> Dict[str, Any]:
-    """Counts for evidence: pool size, distinct forms and per-category overlap."""
+    """Counts for evidence: pool size, distinct forms and per-category overlap.
+
+    The five forbidden categories are reported for the WHOLE pool AND for the
+    target-change family alone (``target_variant_overlap_*``); the family's
+    guard targets are additionally checked against the training target
+    (``overlap_training_targets``, must be 0). ``assert_disjoint_ok`` is the
+    single boolean the evidence script asserts.
+    """
     cases = validation_pool(pool_size)
     keys = {case.form_key() for case in cases}
+    target_cases = [case for case in cases if case.domain == "target"]
+    target_keys = {case.form_key() for case in target_cases}
+    target_values = sorted({case_target_value(case) for case in target_cases
+                            if case_target_value(case) is not None})
     report: Dict[str, Any] = {
         "pool": len(cases),
         "pool_distinct_forms": len(keys),
@@ -589,11 +819,29 @@ def disjointness_report(pool_size: int = POOL_SIZE) -> Dict[str, Any]:
         "by_domain": {
             "prefix": sum(1 for c in cases if c.domain == "prefix"),
             "random": sum(1 for c in cases if c.domain == "random"),
+            "target": len(target_cases),
         },
         "spec_ids": sorted({case.spec_id for case in cases}),
+        "target_variants": {
+            "count": len(target_cases),
+            "spec_ids": sorted({case.spec_id for case in target_cases}),
+            "target_values": target_values,
+            "witness_min_steps": sorted(len(case.witness)
+                                        for case in target_cases),
+            "overlap_training_targets": len(
+                set(target_values) & set(TRAIN_TARGET_VALUES)),
+            "overlap_heldout_eval_targets": len(
+                set(target_values) & set(HELDOUT_EVAL_TARGET_VALUES)),
+        },
     }
+    overlap_total = 0
     for category, forms in forbidden_forms().items():
         report[category] = len(keys & forms)
+        report["target_variant_" + category] = len(target_keys & forms)
+        overlap_total += report[category]
+    report["assert_disjoint_ok"] = bool(
+        overlap_total == 0
+        and report["target_variants"]["overlap_training_targets"] == 0)
     return report
 
 
@@ -638,6 +886,13 @@ __all__ = [
     "SELECTION_EPSILON",
     "TRAIN_SPEC_IDS",
     "HELDOUT_SPEC_IDS",
+    "TARGET_VARIANT_COUNT",
+    "TARGET_VARIANT_SEED",
+    "TARGET_VARIANT_PREFIX",
+    "TRAIN_TARGET_VALUES",
+    "HELDOUT_EVAL_TARGET_VALUES",
+    "TARGET_VARIANT_ANCHOR",
+    "ASSERT_DISJOINT_OK",
     "ValCase",
     "episode_seed",
     "canonical_allowed_nodes",
@@ -648,6 +903,9 @@ __all__ = [
     "evaluate_candidate",
     "count_repeat_sequences",
     "max_repeat_run",
+    "target_change_cases",
+    "replay_witness",
+    "case_target_value",
     "validation_pool",
     "validation_batch",
     "assert_disjoint",

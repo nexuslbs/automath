@@ -279,9 +279,38 @@ seed-13 val64                     pop         64      46        18          0   
 
 ### 6.3 seed 42
 
-PENDING: raw value supplied by the follow-up commit of this same unit.
+```
+seed   family                     actions      n  solved  unsolved   provably  skipped      rate    mean_ep
+-----------------------------------------------------------------------------------------------------------
+seed-42 spec_dynamic_axiom        current      1       1         0          0        0       1.0        1.0
+seed-42 spec_dynamic_axiom        pop          1       1         0          0        0       1.0        0.8
+seed-42 spec_dynamic_group_deep   current      1       1         0          0        0       1.0        1.0
+seed-42 spec_dynamic_group_deep   pop          1       1         0          0        0       1.0   0.033333
+seed-42 spec_dynamic_group        current      1       1         0          0        0       1.0        1.0
+seed-42 spec_dynamic_group        pop          1       1         0          0        0       1.0   0.066667
+seed-42 spec_minimal              current      1       1         0          0        0       1.0        1.0
+seed-42 spec_minimal              pop          1       1         0          0        0       1.0        1.0
+seed-42 spec_multi_step_heldout   current      1       1         0          0        0       1.0        1.0
+seed-42 spec_multi_step_heldout   pop          1       1         0          0        0       1.0   0.066667
+seed-42 spec_multi_step           current      1       1         0          0        0       1.0        1.0
+seed-42 spec_multi_step           pop          1       1         0          0        0       1.0   0.033333
+seed-42 unseen40                  current     40       0         4         36        0       0.0       None
+seed-42 unseen40                  pop         40       0        40          0        0       0.0       None
+seed-42 val64                     current     64      50        14          0        0   0.78125   0.498958
+seed-42 val64                     pop         64      60         4          0        0    0.9375   0.543229
+```
 
-Seed 42 held-out eval launched by the unit-8 watcher at 2026-10-10T06:04:05Z (30 episodes, both action sets); its JSON was not yet written at first commit time. Values are added by the follow-up commit; the raw JSON is unit-8/heldout_seed42.json and the raw sha256 is in the DONE marker.
+* **HEADLINE val64 pop-vs-current:** current `50/64` (coverage `0.78125`, mean
+  `0.498958`) -> pop `60/64` (coverage `0.9375`, mean `0.543229`). **+10 cases.**
+* Selected checkpoint: `spec_id=spec_multi_step`, `genome_len=1153`,
+  `all_time_best_generation=28`, `agent_id=None`, history-row `fitness=2.283333`
+  (best-in-file, gen 28); `selected_val_solved_rate=0.875`.
+* val-term firing: `rows=360`, `generations=30`, `gen_rows_val_gt0=30/30`,
+  `val_min=0.0`, `val_mean=0.480556`, `val_max=0.875`, `gen_val_mean=0.622917`.
+* Shipped specs: **6/6 solved 1/1 under BOTH action sets**.
+* JSON sha256: `67553f59afdc5b0132c421bac197f630bec32259339a6e440b24100477c2f31f`
+  (`/opt/automath/evidence/unsolvable-handling/unit-8/heldout_seed42.json`); the
+  `unit-8/DONE` marker completed at `2026-10-10T06:21:44Z`.
 
 ### 6.4 The `unseen40` finding (applies to every seed)
 
@@ -308,8 +337,8 @@ family.** `unseen40 40/40` with zero training and `dense 320/320` solvable;
 
 **As a learned route, not yet.** On the in-domain held-out pool the gain is
 partial and seed-dependent: seed 7 gains `+15` val64 cases (`49/64 -> 64/64`),
-seed 13 gains `+0` (identical per-case results), and seed 42 is reported in
-section 6.3. The learned policy **cannot be evaluated on `unseen40`** in this
+seed 42 gains `+10` (`50/64 -> 60/64`), seed 13 gains `+0` (identical
+per-case results): the three seeds are `+15 / +0 / +10`. The learned policy **cannot be evaluated on `unseen40`** in this
 harness because the family is stack-domain and the genome is not applicable
 there. So: a generalizing optimal agent exists **explicitly (planner + pop)**;
 it does **not** yet exist as a learned policy on the previously-unsolvable
@@ -355,7 +384,7 @@ Under `pop` the classification has **0 unsolvable and 0 unknown** in
 2. **The mask remains load-bearing for the learned route.** The canonical prune
    auto-disables under `pop`; the visited-state `--mask-illegal` mask is what
    keeps the learned route legal. Do NOT remove it while wiring (1).
-3. **Seed variance of the learned route.** Seed 7 gains `+15` val64 cases,
+3. **Seed variance of the learned route.** Seed 7 gains `+15`, seed 42 `+10`,
    seed 13 `+0`. Re-run more seeds / a longer wall cap and report the
    distribution before claiming any learned generalization; the current 3-seed
    sample is what it is.
@@ -388,4 +417,4 @@ Per-seed JSON sha256 (authoritative 30-episode held-out results):
 | --- | --- | --- |
 | 7 | unit-6/heldout_seed7.json | `f2ed52ab37b8949520ac958ba4baf7ecd292f7cc7e1dce05e9020c05b756c1e7` |
 | 13 | unit-8/heldout_seed13.json | `154450c5828f54122400308be6d76fc1de30689465b29c04f70e1552034c11b6` |
-| 42 | unit-8/heldout_seed42.json | PENDING |
+| 42 | unit-8/heldout_seed42.json | `67553f59afdc5b0132c421bac197f630bec32259339a6e440b24100477c2f31f` |

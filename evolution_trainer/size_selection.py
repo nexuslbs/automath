@@ -146,16 +146,23 @@ def canonical_subtree_prune(env: DynamicEnv, state: State,
                             ) -> Tuple[Action, ...]:
     """Keep only actions whose result stays inside the canonical subtree.
 
-    The planner's sound non-subtree prune (add_a unit-2b): a node that is not a
-    canonical subtree of the target can never be removed (the dynamic-nodes
-    action set has no pop/discard action), so a state carrying such a node is
-    unsolvable on the stack machine the prune was proved for. On the shipped
-    objective-goal specs the guard reads objective values, so the prune is used
-    as the canonical-path filter: it ALWAYS keeps the unique minimal solution
-    step and removes off-canonical builds, which is what breaks the repeated
-    wrong-build loop. ``None`` allowed set (no canonical word) leaves actions
-    untouched.
+    The planner's non-subtree prune (add_a unit-2b): a node that is not a
+    canonical subtree of the target can never be removed, so a state carrying
+    such a node is unsolvable on the stack machine the prune was proved for. On
+    the shipped objective-goal specs the guard reads objective values, so the
+    prune is used as the canonical-path filter: it ALWAYS keeps the unique
+    minimal solution step and removes off-canonical builds, which is what breaks
+    the repeated wrong-build loop. ``None`` allowed set (no canonical word)
+    leaves actions untouched.
+
+    SOUNDNESS (pop action set). The non-subtree argument is only a proof when no
+    action can remove a node. Once the ``pop`` action is enabled the argument is
+    UNSOUND: a state that carries an off-canonical node may still be solvable by
+    popping it. The prune is therefore DISABLED whenever ``env.allow_pop`` is
+    true, so the pop action set is never pruned and no pop-legal state is deleted.
     """
+    if getattr(env, "allow_pop", False):
+        return tuple(actions)
     allowed = canonical_allowed_nodes(env.spec)
     if allowed is None:
         return tuple(actions)

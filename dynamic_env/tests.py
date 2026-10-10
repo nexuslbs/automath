@@ -21,9 +21,14 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from .engine import (
     Action,
     DynamicEnv,
+    action_set_flag,
     bfs_minimal_word,
     count_goal_words,
+    env_for_action_set,
+    legal_actions,
     minimal_length,
+    topmost_work_node,
+    work_stack,
 )
 from .spec import list_spec_files, load_spec, spec_from_dict
 
@@ -365,6 +370,181 @@ def _envs_by_id() -> Dict[str, DynamicEnv]:
     return {spec_id: env for spec_id, env in _envs()}
 
 
+# --------------------------------------------------------------------------
+# Unit 2: the pop action (OFF by default; opt in with allow_pop=True)
+# --------------------------------------------------------------------------
+
+def check_pop_off_by_default() -> str:
+    """``allow_pop=False`` keeps the historical four-action set byte-identical."""
+    for spec_id, env in _envs():
+        start = env.reset()
+        base = env.legal_actions(start)
+        explicit = legal_actions(env.spec, start)
+        if base != explicit:
+            raise CheckFailure("pop_off_by_default",
+                               "%s: DynamicEnv(allow_pop=False) != legal_actions()" % spec_id)
+        if any(a.kind == "pop" for a in base):
+            raise CheckFailure("pop_off_by_default", "%s: pop leaked into the default set" % spec_id)
+    flag = action_set_flag("current")
+    if flag is not False or action_set_flag("pop") is not True:
+        raise CheckFailure("pop_off_by_default", "action_set_flag mapping is wrong")
+    try:
+        action_set_flag("bogus")
+    except ValueError:
+        pass
+    else:
+        raise CheckFailure("pop_off_by_default", "unknown action set did not raise")
+    return ("default action set has no pop for all %d specs; "
+            "action_set_flag(current)=False action_set_flag(pop)=True; unknown raises"
+            % len(_envs()))
+
+
+def check_pop_legality_and_step() -> str:
+    """Pop is legal iff the work stack is non-empty; it removes exactly its top."""
+    checked = 0
+    for spec_id, env in _envs():
+        with_pop = DynamicEnv(env.spec, allow_pop=True)
+        start = with_pop.reset()
+        if topmost_work_node(env.spec, start) is not None:
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: reset state already has a work node" % spec_id)
+        if any(a.kind == "pop" for a in with_pop.legal_actions(start)):
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: pop legal on an empty work stack" % spec_id)
+        discard = Action(kind="pop")
+        result, reason = with_pop.try_step(start, discard)
+        if result is not None or not reason:
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: illegal pop was not discarded" % spec_id)
+        word = bfs_minimal_word(env.spec)
+        if word is None:
+            continue
+        state = with_pop.reset()
+        built = None
+        for key in word:
+            action = _action_from_key(with_pop, state, key)
+            step_result = with_pop.step(state, action)
+            if action.kind in ("build", "combine"):
+                built = (state, step_result)
+                break
+            state = step_result.state
+        if built is None:
+            continue  # no build/combine on the canonical path (e.g. spec_minimal)
+        before, build_result = built
+        after = build_result.state
+        added = build_result.info["added_node"]
+        pop_action = next((a for a in with_pop.legal_actions(after) if a.kind == "pop"), None)
+        if pop_action is None or not with_pop.is_legal(after, pop_action):
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: pop not legal after a build" % spec_id)
+        popped = with_pop.step(after, pop_action)
+        if popped.info.get("removed_node") != added:
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: pop removed %r, expected %r"
+                               % (spec_id, popped.info.get("removed_node"), added))
+        removed = set(after.node_map()) - set(popped.state.node_map())
+        if removed != {added}:
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: pop changed nodes other than %s: %s"
+                               % (spec_id, added, sorted(removed)))
+        if (popped.state.objectives != after.objectives
+                or popped.state.active != after.active
+                or popped.state.fired != after.fired):
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: pop changed non-node state" % spec_id)
+        if popped.state.step != after.step + 1 or popped.state.history[-1] != "pop":
+            raise CheckFailure("pop_legality_and_step",
+                               "%s: pop step/history bookkeeping is wrong" % spec_id)
+        if with_pop.step(after, pop_action).state.canonical() != popped.state.canonical():
+            raise CheckFailure("pop_legality_and_step", "%s: pop is not deterministic" % spec_id)
+        checked += 1
+    return ("pop discarded when illegal, legal after a build, removes exactly the "
+            "newest work node (checked %d specs)" % checked)
+
+
+def check_pop_replay_witness() -> str:
+    """``[POP]*len(initial work stack) + canonical word`` reaches the goal."""
+    checked = 0
+    for spec_id, env in _envs():
+        word = bfs_minimal_word(env.spec)
+        if word is None or len(word) == 0:
+            continue
+        with_pop = DynamicEnv(env.spec, allow_pop=True)
+        # Perturbed start: one extra legal build/combine (a work node) on top of
+        # the reset state. Pop the whole work stack and replay the canonical word
+        # (the stack roll-back reuses the popped node ids, so the word replays).
+        start = with_pop.reset()
+        filler = [a for a in with_pop.legal_actions(start) if a.kind in ("build", "combine")]
+        if filler:
+            start = with_pop.step(start, filler[0]).state
+        top = topmost_work_node(env.spec, start)
+        if top is None:
+            continue
+        witness = ["pop"] * len(work_stack(env.spec, start)) + list(word)
+        state = start
+        for key in witness:
+            action = _action_from_key(with_pop, state, key)
+            state = with_pop.step(state, action).state
+        if not with_pop.goal_reached(state):
+            raise CheckFailure("pop_replay_witness",
+                               "%s: witness %r did not reach the goal" % (spec_id, witness))
+        # The same witness must be illegal/absent without pop.
+        without = DynamicEnv(env.spec, allow_pop=False)
+        state = start
+        for key in witness:
+            match = next((a for a in without.legal_actions(state) if a.key() == key), None)
+            if match is None:
+                break
+            state = without.step(state, match).state
+        if without.goal_reached(state):
+            raise CheckFailure("pop_replay_witness",
+                               "%s: witness also solved WITHOUT pop" % spec_id)
+        checked += 1
+    if checked == 0:
+        raise CheckFailure("pop_replay_witness", "no spec exercised the pop witness")
+    return ("[pop]*len(work stack)+canonical word reaches the goal in the REAL env "
+            "and needs pop (checked %d specs)" % checked)
+
+
+def check_action_set_selection() -> str:
+    """The env selects the action set and the action space grows by exactly pop."""
+    before = 0
+    after = 0
+    for spec_id, env in _envs():
+        state = env.reset()
+        current = len(DynamicEnv(env.spec, allow_pop=False).legal_actions(state))
+        popped = len(DynamicEnv(env.spec, allow_pop=True).legal_actions(state))
+        if popped != current:
+            raise CheckFailure("action_set_selection",
+                               "%s: pop changed the reset action count %d -> %d"
+                               % (spec_id, current, popped))
+        word = bfs_minimal_word(env.spec)
+        if word is None:
+            continue
+        state = DynamicEnv(env.spec, allow_pop=True).reset()
+        applied = False
+        for key in word:
+            action = _action_from_key(DynamicEnv(env.spec, allow_pop=True), state, key)
+            state = DynamicEnv(env.spec, allow_pop=True).step(state, action).state
+            if action.kind in ("build", "combine"):
+                applied = True
+                break
+        if not applied:
+            continue
+        current = len(DynamicEnv(env.spec, allow_pop=False).legal_actions(state))
+        popped = len(DynamicEnv(env.spec, allow_pop=True).legal_actions(state))
+        if popped != current + 1:
+            raise CheckFailure("action_set_selection",
+                               "%s: pop delta %d -> %d is not exactly +1"
+                               % (spec_id, current, popped))
+        before += current
+        after += popped
+    if not (env_for_action_set(_envs()[0][1].spec, "pop").allow_pop is True):
+        raise CheckFailure("action_set_selection", "env_for_action_set did not enable pop")
+    return ("pop adds exactly +1 action on a non-empty work stack; "
+            "reset count unchanged (sample totals %d -> %d)" % (before, after))
+
+
 CHECKS: Tuple[Tuple[str, Callable[[], str]], ...] = (
     ("specs_are_data", check_specs_are_data),
     ("no_spec_ids_in_engine", check_no_spec_ids_in_engine),
@@ -379,6 +559,10 @@ CHECKS: Tuple[Tuple[str, Callable[[], str]], ...] = (
     ("wrong_step_discarded", check_wrong_step_discarded),
     ("reward_hook", check_reward_hook),
     ("goal_reachable", check_goal_reachable),
+    ("pop_off_by_default", check_pop_off_by_default),
+    ("pop_legality_and_step", check_pop_legality_and_step),
+    ("pop_replay_witness", check_pop_replay_witness),
+    ("action_set_selection", check_action_set_selection),
 )
 
 
@@ -458,6 +642,22 @@ def test_reward_hook() -> None:
 
 def test_goal_reachable() -> None:
     check_goal_reachable()
+
+
+def test_pop_off_by_default() -> None:
+    check_pop_off_by_default()
+
+
+def test_pop_legality_and_step() -> None:
+    check_pop_legality_and_step()
+
+
+def test_pop_replay_witness() -> None:
+    check_pop_replay_witness()
+
+
+def test_action_set_selection() -> None:
+    check_action_set_selection()
 
 
 if __name__ == "__main__":

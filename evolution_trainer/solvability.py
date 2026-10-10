@@ -200,32 +200,6 @@ class _StackProblem:
 # dynamic_env problem (Spec + State domain)
 # --------------------------------------------------------------------------
 
-def _dyn_pop(spec, state):
-    from dynamic_env.engine import State, _sorted_nodes, fire_dynamic_axioms
-
-    nodes = list(state.nodes)
-    if not nodes:
-        return state
-
-    def _num(node_id: str) -> int:
-        digits = "".join(ch for ch in node_id if ch.isdigit())
-        return int(digits) if digits else -1
-
-    newest = max(nodes, key=lambda n: _num(n.id))
-    kept = [n for n in nodes if n is not newest]
-    new_state = State(
-        nodes=_sorted_nodes({n.id: n for n in kept}),
-        objectives=state.objectives,
-        active=state.active,
-        fired=state.fired,
-        step=state.step + 1,
-        next_id=state.next_id,
-        history=state.history + (POP + ":" + newest.id,),
-        last_error=None,
-    )
-    return fire_dynamic_axioms(spec, new_state)
-
-
 class _DynProblem:
     kind = "dyn"
     complete_depth_bound = False
@@ -236,7 +210,10 @@ class _DynProblem:
 
         self.name = name
         self.spec = spec
-        self.env = DynamicEnv(spec)
+        # Unit 2: the REAL DynamicEnv drives the action set. ``allow_pop`` turns
+        # the engine's own ``pop`` action on, so the oracle no longer reimplements
+        # the discard (the unit-1 ``_dyn_pop`` helper is gone).
+        self.env = DynamicEnv(spec, allow_pop=bool(with_pop))
         self.initial = start_state if start_state is not None else self.env.reset()
         self.with_pop = bool(with_pop)
         self.depth_limit = int(getattr(spec, "max_steps", 0) or 0)
@@ -244,8 +221,6 @@ class _DynProblem:
             self.depth_limit += len(self.initial.nodes)
 
     def apply(self, state, name: str):
-        if name == POP:
-            return _dyn_pop(self.spec, state)
         match = None
         for action in self.env.legal_actions(state):
             if action.key() == name:
@@ -265,8 +240,6 @@ class _DynProblem:
         out: List[Tuple[str, Any]] = []
         for action in self.env.legal_actions(state):
             out.append((action.key(), self.env.step(state, action).state))
-        if self.with_pop:
-            out.append((POP, _dyn_pop(self.spec, state)))
         return out
 
     def h(self, state) -> int:
@@ -282,6 +255,24 @@ class _DynProblem:
 
     def fast_witness(self) -> Optional[List[str]]:
         return None
+
+    def pop_full_witness(self) -> Optional[List[str]]:
+        """Sound pop-all upper bound in the REAL engine (replay-verified).
+
+        Discard every work node of the initial state, then replay the real
+        engine's canonical word. Only returned when ``bfs_minimal_word`` finds a
+        word; the caller re-executes it and accepts it only if it reaches the
+        goal, so its length is an UPPER bound.
+        """
+        if not self.with_pop:
+            return None
+        from dynamic_env.engine import bfs_minimal_word, work_stack
+
+        word = bfs_minimal_word(self.spec)
+        if word is None:
+            return None
+        prefix = ["pop"] * len(work_stack(self.spec, self.initial))
+        return prefix + list(word)
 
 
 # --------------------------------------------------------------------------

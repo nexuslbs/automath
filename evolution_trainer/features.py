@@ -119,7 +119,12 @@ class ActionFeaturizer:
     def featurize(self, state: State, action: Action) -> Tuple[float, ...]:
         vec = [0.0] * self.dim
         base = 0
-        vec[base + KIND_ORDER.index(action.kind)] = 1.0
+        # A ``pop`` action (only present under the pop action set) carries NO
+        # kind bit and NO main key: the vector width is unchanged, so the
+        # default (current) action set stays byte-identical. Pop is then
+        # distinguished by the all-zero kind block plus zero operands.
+        if action.kind in KIND_ORDER:
+            vec[base + KIND_ORDER.index(action.kind)] = 1.0
         base += len(KIND_ORDER)
         key = self._main_key(action)
         if key is not None and key in self.index:

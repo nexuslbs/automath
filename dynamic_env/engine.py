@@ -21,6 +21,12 @@ Actions (all derived per spec)
                 node into the dynamic grouping node. This is the "combine nodes
                 into a dynamic grouping node" action.
 * ``set`` / ``clear`` - set or clear one elementar 1/0 objective node.
+* ``pop``     - discard the TOPMOST node of the current work/partial-solution
+                stack (the most recently ``build``/``combine``-constructed node
+                that is not part of the spec's initial node set). It is legal iff
+                that work stack is non-empty. It is OFF by default
+                (``allow_pop=False``) so the historical four-action set stays
+                byte-identical; enabling it is the ``pop`` action set.
 
 Strict laws
 -----------
@@ -98,6 +104,49 @@ def _sorted_items(mapping: Mapping[str, int]) -> Tuple[Tuple[str, int], ...]:
 
 def _normalized_active(active: Iterable[str]) -> Tuple[str, ...]:
     return tuple(sorted(set(active)))
+
+
+#: The pop action kind (a discard of the topmost WORK node). OFF unless the
+#: environment is built with ``allow_pop=True`` (the ``pop`` action set).
+POP = "pop"
+
+
+def _work_number(node_id: str) -> Optional[int]:
+    """The sequence number of an engine-constructed work node, or ``None``.
+
+    ``_build_node`` names every node it constructs ``g<next_id>``; a spec's own
+    initial nodes carry whatever ids the spec declares. A work node is therefore
+    a ``g<digits>`` id that is NOT in the spec's initial node set (so a spec that
+    happens to name an initial node ``g1`` is never popped).
+    """
+    if len(node_id) < 2 or node_id[0] != "g":
+        return None
+    digits = node_id[1:]
+    return int(digits) if digits.isdigit() else None
+
+
+def work_stack(spec: Spec, state: State) -> Tuple[Node, ...]:
+    """The current work/partial-solution stack, oldest first.
+
+    It is exactly the set of combination nodes the interpreter constructed
+    during the episode (``g<next_id>`` ids not present in ``spec.nodes``), ordered
+    by construction number. Nodes added by a spec's ``add_node`` dynamic-axiom
+    effect and the spec's own initial nodes are NOT part of the stack.
+    """
+    work: List[Tuple[int, Node]] = []
+    for node in state.nodes:
+        number = _work_number(node.id)
+        if number is None or node.id in spec.nodes:
+            continue
+        work.append((number, node))
+    work.sort(key=lambda item: item[0])
+    return tuple(node for _number, node in work)
+
+
+def topmost_work_node(spec: Spec, state: State) -> Optional[Node]:
+    """The most recently constructed work node, or ``None`` when the stack is empty."""
+    stack = work_stack(spec, state)
+    return stack[-1] if stack else None
 
 
 # --------------------------------------------------------------------------
@@ -388,7 +437,7 @@ def fire_dynamic_axioms(spec: Spec, state: State) -> State:
 
 @dataclass(frozen=True)
 class Action:
-    kind: str  # build | combine | set | clear
+    kind: str  # build | combine | set | clear | pop (pop only when allow_pop)
     axiom_id: Optional[str] = None
     tag_id: Optional[str] = None
     operands: Tuple[str, ...] = ()
@@ -418,8 +467,14 @@ def _guard_ok(spec: Spec, state: State, objective_id: str, value: int) -> bool:
     return check_condition(spec, state, guard)
 
 
-def legal_actions(spec: Spec, state: State) -> Tuple[Action, ...]:
-    """All legal actions from a state, in a deterministic canonical order."""
+def legal_actions(spec: Spec, state: State,
+                  allow_pop: bool = False) -> Tuple[Action, ...]:
+    """All legal actions from a state, in a deterministic canonical order.
+
+    ``allow_pop`` adds the ``pop`` discard action, legal iff the work stack is
+    non-empty. It defaults to ``False`` so the historical four-action set is
+    unchanged (byte-identical) for every existing caller.
+    """
     actions: List[Action] = []
     operands = evaluable_operands(spec, state)
     node_map = state.node_map()
@@ -461,6 +516,9 @@ def legal_actions(spec: Spec, state: State) -> Tuple[Action, ...]:
         if objs[oid] != 0:
             actions.append(Action(kind="clear", objective_id=oid))
 
+    if allow_pop and topmost_work_node(spec, state) is not None:
+        actions.append(Action(kind=POP))
+
     actions.sort(key=lambda a: a.key())
     # De-duplicate identical keys (impossible by construction, but cheap).
     seen = set()
@@ -474,8 +532,9 @@ def legal_actions(spec: Spec, state: State) -> Tuple[Action, ...]:
     return tuple(unique)
 
 
-def is_legal(spec: Spec, state: State, action: Action) -> bool:
-    return action in legal_actions(spec, state)
+def is_legal(spec: Spec, state: State, action: Action,
+             allow_pop: bool = False) -> bool:
+    return action in legal_actions(spec, state, allow_pop)
 
 
 # --------------------------------------------------------------------------
@@ -526,11 +585,25 @@ def _step_internal(spec: Spec, state: State, action: Action
         nodes[node.id] = node
         next_id += 1
         info["added_node"] = node.id
+    elif action.kind == POP:
+        top = topmost_work_node(spec, state)
+        if top is not None:
+            del nodes[top.id]
+            info["removed_node"] = top.id
+            # The work stack is a true stack: roll next_id back so the popped
+            # frame's id is reused. This keeps ``[pop]*k`` a faithful undo and
+            # lets ``[pop]*k + canonical word`` replay identically.
+            remaining = [
+                _work_number(node.id)
+                for node in nodes.values()
+                if _work_number(node.id) is not None and node.id not in spec.nodes
+            ]
+            next_id = (max(remaining) + 1) if remaining else 0
     elif action.kind == "set":
         objectives[action.objective_id] = 1
     elif action.kind == "clear":
         objectives[action.objective_id] = 0
-    else:  # pragma: no cover - legal_actions only emits the four kinds
+    else:  # pragma: no cover - legal_actions only emits the declared kinds
         raise IllegalAction("unknown action kind %r" % action.kind)
 
     new_state = State(
@@ -551,9 +624,10 @@ def _step_internal(spec: Spec, state: State, action: Action
     return new_state, info
 
 
-def step(spec: Spec, state: State, action: Action) -> StepResult:
+def step(spec: Spec, state: State, action: Action,
+         allow_pop: bool = False) -> StepResult:
     """Apply a LEGAL action; raise :class:`IllegalAction` otherwise."""
-    if not is_legal(spec, state, action):
+    if not is_legal(spec, state, action, allow_pop):
         raise IllegalAction(action.key())
     result, info = _step_internal(spec, state, action)
     done = bool(info["goal"])
@@ -561,15 +635,17 @@ def step(spec: Spec, state: State, action: Action) -> StepResult:
     return StepResult(state=result, reward=reward, done=done, info=info)
 
 
-def try_step(spec: Spec, state: State, action: Action) -> Tuple[Optional[StepResult], Optional[str]]:
+def try_step(spec: Spec, state: State, action: Action,
+             allow_pop: bool = False
+             ) -> Tuple[Optional[StepResult], Optional[str]]:
     """Discard an illegal action deterministically: ``(None, reason)``.
 
     The caller keeps the original state, so a wrong step leaves the episode
     exactly where it was.
     """
-    if not is_legal(spec, state, action):
+    if not is_legal(spec, state, action, allow_pop):
         return None, "illegal action not in the action space: %s" % action.key()
-    return step(spec, state, action), None
+    return step(spec, state, action, allow_pop), None
 
 
 # --------------------------------------------------------------------------
@@ -577,16 +653,29 @@ def try_step(spec: Spec, state: State, action: Action) -> Tuple[Optional[StepRes
 # --------------------------------------------------------------------------
 
 class DynamicEnv:
-    """A deterministic environment built from a :class:`Spec` (pure DATA)."""
+    """A deterministic environment built from a :class:`Spec` (pure DATA).
 
-    def __init__(self, spec: Spec) -> None:
+    ``allow_pop`` selects the action set: ``False`` (default) is the historical
+    four-action set ``build/combine/set/clear``; ``True`` adds the ``pop``
+    discard action. The default path is byte-identical to the pre-pop engine.
+    """
+
+    #: The two selectable action-set names accepted by :func:`action_set_flag`.
+    ACTION_SETS: Tuple[str, ...] = ("current", "pop")
+
+    def __init__(self, spec: Spec, allow_pop: bool = False) -> None:
         self.spec = spec
+        self.allow_pop = bool(allow_pop)
+
+    @property
+    def action_set(self) -> str:
+        return "pop" if self.allow_pop else "current"
 
     @staticmethod
-    def from_spec_file(path: str) -> "DynamicEnv":
+    def from_spec_file(path: str, allow_pop: bool = False) -> "DynamicEnv":
         from .spec import load_spec
 
-        return DynamicEnv(load_spec(path))
+        return DynamicEnv(load_spec(path), allow_pop=allow_pop)
 
     def reset(self) -> State:
         nodes = dict(self.spec.nodes)
@@ -610,16 +699,16 @@ class DynamicEnv:
         return fire_dynamic_axioms(self.spec, state)
 
     def legal_actions(self, state: State) -> Tuple[Action, ...]:
-        return legal_actions(self.spec, state)
+        return legal_actions(self.spec, state, self.allow_pop)
 
     def is_legal(self, state: State, action: Action) -> bool:
-        return is_legal(self.spec, state, action)
+        return is_legal(self.spec, state, action, self.allow_pop)
 
     def step(self, state: State, action: Action) -> StepResult:
-        return step(self.spec, state, action)
+        return step(self.spec, state, action, self.allow_pop)
 
     def try_step(self, state: State, action: Action) -> Tuple[Optional[StepResult], Optional[str]]:
-        return try_step(self.spec, state, action)
+        return try_step(self.spec, state, action, self.allow_pop)
 
     def goal_reached(self, state: State) -> bool:
         return goal_reached(self.spec, state)
@@ -680,6 +769,24 @@ class DynamicEnv:
 # --------------------------------------------------------------------------
 # Deterministic planning over the derived action space
 # --------------------------------------------------------------------------
+
+#: Action-set names understood by :func:`action_set_flag` (CLI/config form).
+ACTION_SETS: Tuple[str, ...] = ("current", "pop")
+
+
+def action_set_flag(name: str) -> bool:
+    """Map an action-set name to ``allow_pop``: ``current`` -> False, ``pop`` -> True."""
+    if name == "current":
+        return False
+    if name == "pop":
+        return True
+    raise ValueError("unknown action set %r (expected 'current' or 'pop')" % name)
+
+
+def env_for_action_set(spec: Spec, action_set: str = "current") -> DynamicEnv:
+    """A :class:`DynamicEnv` for the named action set (``current`` | ``pop``)."""
+    return DynamicEnv(spec, allow_pop=action_set_flag(action_set))
+
 
 def _make_env(spec: Spec) -> DynamicEnv:
     return spec if isinstance(spec, DynamicEnv) else DynamicEnv(spec)

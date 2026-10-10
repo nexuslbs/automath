@@ -370,3 +370,123 @@ cd /opt/automath/tmp/unsolvable-u1
   --out classification.json
 /opt/automath/venv/bin/python analyze.py . by_family/*.json   # tables.md + delta.md
 ```
+
+## 8. Implemented action space: the real `pop` action (unit 2, task 4349 FIX 1)
+
+Unit 1b modelled `pop` in the oracle. Unit 2 implements it in the engine and
+re-runs the classification with the REAL `DynamicEnv`.
+
+### 8.1 The change
+
+* `dynamic_env/engine.py`: `DynamicEnv(spec, allow_pop=False)`. With
+  `allow_pop=True` the engine emits a new `Action(kind="pop")`, legal iff the
+  work/partial-solution stack is non-empty. The work stack is exactly the
+  combination nodes the interpreter itself constructed (`g<next_id>` ids that are
+  NOT in `spec.nodes`); initial nodes and `add_node` dynamic-axiom nodes are not
+  part of it. `pop` removes the topmost work node and ROLLS `next_id` back, so
+  the work stack is a true stack and `[pop]*k` is a faithful undo.
+* Wiring: module functions `legal_actions(spec, state, allow_pop)` /
+  `is_legal` / `step` / `try_step`; `DynamicEnv.legal_actions/is_legal/step/
+  try_step` forward `self.allow_pop`; `action_set_flag("current"|"pop")` and
+  `env_for_action_set(spec, name)` are the config/CLI selectors.
+* `allow_pop=False` is byte-identical: the 4-kind `KIND_ORDER` is unchanged, the
+  action vector width is unchanged and the size-invariant genome stays 1153
+  genes (proved by `size_invariant_tests`, "one genome length 1153"). A `pop`
+  action (only present under the pop action set) carries no kind bit and no main
+  key, so it is distinguishable without resizing anything.
+
+### 8.2 Soundness update (the prune is no longer a proof of unsolvability)
+
+The unit-1b `canonical non-subtree => unsolvable` argument assumed NO action can
+remove a node. With `pop` that assumption is false. `size_selection.
+canonical_subtree_prune` now returns the actions UNCHANGED whenever
+`env.allow_pop` is true, so the canonical mask never deletes a pop-legal state.
+Under the `current` action set the prune is unchanged.
+
+### 8.3 Action-space delta (real engine, one state)
+
+`pop` adds 0 actions on an empty work stack and exactly +1 after a work node.
+
+| spec | actions current (reset) | actions pop (reset) | actions current (1 work node) | actions pop (1 work node) | min current | min pop |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| spec_minimal | 1 | 1 | - | - | 1 | 1 |
+| spec_multi_step | 18 | 18 | 36 | 37 | 2 | 2 |
+| spec_dynamic_axiom | 1 | 1 | - | - | 3 | 3 |
+| spec_dynamic_group | 4 | 4 | 9 | 10 | 2 | 2 |
+| spec_multi_step_heldout | 18 | 18 | 37 | 38 | 2 | 2 |
+| spec_dynamic_group_deep | 15 | 15 | 40 | 41 | 3 | 3 |
+
+### 8.4 Real-engine re-classification (same budgets as section 4)
+
+The `_DynProblem` oracle now builds `DynamicEnv(spec, allow_pop=with_pop)` and
+iterates the ENGINE'S legal actions (the unit-1 `_dyn_pop` helper is deleted).
+The stack families still run on their own `new_approach` action engine (they
+have no `dynamic_env` counterpart; see 8.5). The table is byte-for-byte the
+unit-1 table, so the oracle model is CONFIRMED on the real engine for every
+family the engine can represent.
+
+| family | action set | n | solvable | unsolvable | unknown | min steps | median steps |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| demo_bundle | current | 7 | 5 | 2 | 0 | 2 | 5 |
+| demo_bundle | pop | 7 | 5 | 2 | 0 | 2 | 5 |
+| core33 | current | 33 | 31 | 0 | 2 | 0 | 1 |
+| core33 | pop | 33 | 31 | 0 | 2 | 0 | 1 |
+| ext114 | current | 114 | 114 | 0 | 0 | 0 | 5 |
+| ext114 | pop | 114 | 114 | 0 | 0 | 0 | 5 |
+| unseen40 | current | 40 | 0 | 36 | 4 | - | - |
+| unseen40 | pop | 40 | 40 | 0 | 0 | 2 | 4 |
+| val64 | current | 64 | 64 | 0 | 0 | 1 | 2 |
+| val64 | pop | 64 | 64 | 0 | 0 | 1 | 2 |
+| dense | current | 320 | 158 | 136 | 26 | 0 | 4 |
+| dense | pop | 320 | 320 | 0 | 0 | 0 | 5 |
+| spec_multi_step | current | 1 | 0 | 0 | 1 | - | - |
+| spec_multi_step | pop | 1 | 0 | 0 | 1 | - | - |
+| spec_dynamic_axiom | current | 1 | 0 | 0 | 1 | - | - |
+| spec_dynamic_axiom | pop | 1 | 0 | 0 | 1 | - | - |
+| spec_dynamic_group_deep | current | 1 | 0 | 0 | 1 | - | - |
+| spec_dynamic_group_deep | pop | 1 | 0 | 0 | 1 | - | - |
+| spec_multi_step_heldout | current | 1 | 0 | 0 | 1 | - | - |
+| spec_multi_step_heldout | pop | 1 | 0 | 0 | 1 | - | - |
+| perturb_multi_step | current | 30 | 0 | 0 | 30 | - | - |
+| perturb_multi_step | pop | 30 | 0 | 0 | 30 | - | - |
+
+Real-engine newly-solvable counts (pop minus current), raw from
+`real_env_pop_report.json`:
+
+* `val64` (64 `dynamic_env` start states, real engine): current 64/64,
+  pop 64/64, newly 0; action-count sum over the 64 start states 3084 -> 3148.
+* unseen40-type perturbed form, real engine (`evolution_trainer/
+  solvability_tests.PERTURBED_SPEC`, an off-canonical work node blocks the goal
+  guard): with 2 work nodes current=UNKNOWN and pop=SOLVABLE in 2 steps; with 3
+  work nodes current=UNKNOWN and pop=SOLVABLE in 3 steps; with 4 work nodes
+  current=UNKNOWN and pop=SOLVABLE in 6 steps. `[pop]*len(work)+canonical word`
+  replays to the goal in the real engine.
+
+### 8.5 Exact disagreement with the unit-1 oracle model
+
+* The named families `demo_bundle`, `core33`, `ext114`, `unseen40` and `dense`
+  are `new_approach` STACK-domain cases (`.env` present); they have no
+  `dynamic_env` Spec, so `DynamicEnv` cannot represent them. Their pop evidence
+  is the stack engine (`new_approach` build actions), which reproduces
+  unseen40 40/40 and dense 320/320 exactly. This is a domain mismatch in the
+  unit-1 CLI, not a behavioural disagreement.
+* The unit-1 `_DynProblem` pop deleted the node with the largest numeric id
+  among ALL nodes, including the spec's initial value nodes (e.g. `n9`). The
+  real engine's `pop` deletes only the topmost ENGINE-CONSTRUCTED work node and
+  rolls `next_id` back. On the dynamic families this changes no verdict in the
+  table above; it is the difference that makes `[pop]*k + canonical word`
+  replayable.
+
+### 8.6 Unit tests (unit 2)
+
+* `dynamic_env/tests.py`: 17/17 PASS: pop off-by-default, legality + exact step
+  semantics (newest work node, bookkeeping, determinism), pop-all-and-replay
+  witness in the real env, action-set selection (+1 after a build). Tail:
+  `RESULT: 17/17 passed in 1.535s`.
+* `evolution_trainer/solvability_tests.py` (NEW): 5/5 PASS: perturbed form
+  current=UNKNOWN / pop=SOLVABLE, pop-all replay witness, shipped specs solve
+  with pop, canonical prune deletes no pop action, default engine unchanged.
+  Tail: `RESULT: 5/5 passed`.
+* Regression on the touched trainer modules: `size_selection_tests` 5/5 PASS,
+  `size_invariant_tests` 6/6 PASS (genome length still 1153).
+

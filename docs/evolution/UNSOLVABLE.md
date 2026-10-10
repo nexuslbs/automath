@@ -490,3 +490,81 @@ Real-engine newly-solvable counts (pop minus current), raw from
 * Regression on the touched trainer modules: `size_selection_tests` 5/5 PASS,
   `size_invariant_tests` 6/6 PASS (genome length still 1153).
 
+## 9. Graceful unsolvable handling (unit 3, task 4349)
+
+Code: `evolution_trainer/graceful.py` (evaluation only; stdlib plus the oracle).
+Wired into `evolution_trainer/curriculum.py`
+(`--graceful-unsolvable` / `--no-graceful-unsolvable`, default ON; `--stage
+graceful`) and `evolution_trainer/size_selection.evaluate_validation` (config
+key `graceful_unsolvable`, default ON; the held-out pool is solvable-only so the
+4344 selection numbers are unchanged). Tests:
+`evolution_trainer/graceful_tests.py` 8/8 PASS; regression
+`solvability_tests` 5/5, `size_selection_tests` 5/5, `evolution_trainer.tests`
+13/13, `curriculum_tests` 7/7.
+
+Evidence (compute host): `/opt/automath/evidence/unsolvable-handling/unit-3/`
+(`SUMMARY.json`, `train_pool_dense.json`, `three_way.json`, `three_way_specs.json`,
+`planner_eval.json`, `disjointness_report.log`).
+
+### 9.1 Training pool flag: bounded ON vs OFF measurement
+
+Same bounded pool stage (`dense`, 320 cases, 3 generations, oracle budgets
+20000 nodes / 1.5 s), graceful OFF vs ON:
+
+| flag | wall s | episodes attempted | skipped | solved | static excluded | unknown at entry | budget-dropped |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| OFF | 143.229 | 960 | 0 | 474 | 0 | 0 | 0 |
+| ON | 91.619 | 503 | 457 | 474 | 135 | 27 | 26 |
+
+Time saved `143.229 - 91.619 = 51.610 s` (36.0%). Dense static exclusion
+`135 UNSOLVABLE + 27 UNKNOWN = 162/320 = 50.6%`; unit-1 recorded the same total
+as `136 + 26` (the 1-case difference is the 1.5 s time-budget boundary, so the
+`UNSOLVABLE`/`UNKNOWN` split is budget-relative while the 162 total is stable).
+Static exclusion for the other families: `val64 = 0/64`; `unseen40` under
+`current = 36 UNSOLVABLE + 4 UNKNOWN` (all 40 unreachable), under `pop = 0/40`
+excluded.
+
+### 9.2 Evaluation: standard three-way report (held-out + shipped specs)
+
+`graceful.three_way` classifies every case, then attempts only non-unsolvable
+cases (per-case step/time budget, per-case wall time). Held-out, `current`:
+
+| family | n | SOLVABLE-SOLVED | SOLVABLE-UNSOLVED | PROVABLY-UNSOLVABLE | solve rate | failure modes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| core33 | 33 | 32 | 1 | 0 | 0.9697 | budget_exhausted 1 |
+| ext114 | 114 | 114 | 0 | 0 | 1.0000 | - |
+| unseen40 | 40 | 0 | 4 | 36 | 0.0000 | budget_exhausted 4 |
+| val64 | 64 | 64 | 0 | 0 | 1.0000 | - |
+
+Shipped specs (wrapped with their BFS witness): 4/4 `SOLVABLE-SOLVED`, 0
+`SOLVABLE-UNSOLVED`, 0 `PROVABLY-UNSOLVABLE`. A provably-unsolvable case is its
+own bucket: it is never attempted and never counted as a failure.
+
+### 9.3 Planner regression with the new action space
+
+The explicit planner (`REDUCTION_TABLE` bounded best-first, pattern-goal
+fallback) on `current` vs `pop`:
+
+| family | current | pop | pop min steps | pop median steps |
+| --- | ---: | ---: | ---: | ---: |
+| core33 | 32/33 | 32/33 | 1 | 2 |
+| ext114 | 114/114 | 114/114 | 1 | 5 |
+| unseen40 | 0/40 | 40/40 | 2 | 4 |
+
+`core33` and `ext114` are unchanged by `pop`; `unseen40` goes `0/40` (4 unknown)
+to `40/40`. Raw eval `planner_eval.json`, sha256
+`c54792970bbd1411e4fb4eba0dacdfa3de5e2bb5581932d186cc651016f8a28c`.
+
+### 9.4 Fix-2 re-verify with the new action space
+
+`disjointness_report()` re-run on the unit-3 tree: `pool=64`,
+`pool_distinct_forms=64`, `by_domain` prefix 0 / random 64, and every overlap 0
+(`overlap_bundle`, `overlap_unseen40`, `overlap_core33`, `overlap_ext114`,
+`overlap_dense_train`). Constants `POOL_SIZE=64`, `val_batch=16`,
+`VAL_SEED=20261010`, `val_weight=1.0`; formula
+`fitness = shaped_return + solved_rate_weight*mean_solved_rate_30 +
+val_weight*val_solved_rate`. Recorded 4344 val-term firing (task 4344 evidence):
+seeds 7/13/42 -> `val_solved_rate = 0.75 (12/16) / 0.8125 (13/16) / 0.875
+(14/16)`, versus `0.000/16` for the gen-fitness pool in task 4342. Fresh firing
+statistics under `pop` come from the training re-run unit (next).
+

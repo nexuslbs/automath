@@ -508,10 +508,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--val-seed", type=int, default=20261010)
     parser.add_argument("--val-pool-size", type=int, default=64)
     parser.add_argument("--mask-illegal", action="store_true")
+    # task 4354 unit 3A: hand (default) | learned | none mask for the
+    # selection/validation rollouts; behaviour is unchanged at the default.
+    parser.add_argument("--prune-mode", default="hand",
+                        choices=["hand", "learned", "none"])
+    parser.add_argument("--prune-checkpoint", default="")
     args = parser.parse_args(argv)
 
     selection: Optional[Dict[str, Any]] = None
-    if args.selection_episodes > 0 or args.val_weight > 0.0 or args.mask_illegal:
+    if (args.selection_episodes > 0 or args.val_weight > 0.0
+            or args.mask_illegal or args.prune_mode != "hand"
+            or args.prune_checkpoint):
         selection = {
             "selection_episodes": args.selection_episodes,
             "selection_seed": args.selection_seed,
@@ -522,6 +529,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "val_seed": args.val_seed,
             "val_pool_size": args.val_pool_size,
             "mask_illegal": args.mask_illegal,
+            "prune_mode": args.prune_mode,
+            "prune_checkpoint": args.prune_checkpoint,
         }
 
     os.makedirs(args.out, exist_ok=True)

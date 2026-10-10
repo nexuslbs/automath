@@ -267,13 +267,23 @@ def rollout(net, genome: Sequence[float], spec: Spec,
             start_state: Optional[State], root_mask: Sequence[int],
             rng: random.Random, epsilon: float = 0.0,
             mask_illegal: bool = False,
-            max_steps: Optional[int] = None) -> Dict[str, Any]:
+            max_steps: Optional[int] = None,
+            prune_mode: Optional[str] = None,
+            prune_net=None) -> Dict[str, Any]:
     """One episode from ``start_state`` (or the spec's reset state).
 
     ``epsilon`` is the probability of a uniform random legal action; the rest
     of the time the argmax of the size-invariant genome's logits is taken over
     the (optionally masked) legal actions. The RNG is supplied by the caller so
     the episode is reproducible from its explicit seed.
+
+    ``prune_mode`` selects the mask (task 4354 unit 3A):
+
+    * ``None`` (default) -> ``"hand"`` when ``mask_illegal`` else ``"none"``,
+      so the pre-3A behaviour is unchanged;
+    * ``"hand"``    -> the task-4344 canonical-subtree + visited filter;
+    * ``"learned"`` -> the trained value-function prune ONLY (no hand filter);
+    * ``"none"``    -> no mask.
     """
     env = DynamicEnv(spec)
     state = start_state if start_state is not None else env.reset()
@@ -281,14 +291,25 @@ def rollout(net, genome: Sequence[float], spec: Spec,
     seen: Set[str] = {state.identity()}
     steps = 0
     trace: List[str] = []
+    effective_mode = (prune_mode if prune_mode is not None
+                      else ("hand" if mask_illegal else "none"))
     while steps < limit:
         actions = env.legal_actions(state)
         if not actions:
             break
-        if mask_illegal:
-            masked = masked_legal_actions(env, state, seen, actions=actions)
+        if effective_mode == "hand":
+            if mask_illegal:
+                masked = masked_legal_actions(env, state, seen, actions=actions)
+                if masked:
+                    actions = masked
+        elif effective_mode == "learned":
+            from . import learned_prune as _learned_prune
+            masked = _learned_prune.learned_prune(env, state, actions,
+                                                  prune_net)
             if masked:
                 actions = masked
+        elif effective_mode != "none":
+            raise ValueError("unknown prune mode %r" % (effective_mode,))
         if epsilon > 0.0 and rng.random() < epsilon:
             action = actions[rng.randrange(len(actions))]
         else:
@@ -316,12 +337,18 @@ def evaluate_candidate(net, genome: Sequence[float], spec: Spec, generation: int
                        epsilon: float = SELECTION_EPSILON,
                        mask_illegal: bool = False,
                        root_mask: Optional[Sequence[int]] = None,
-                       max_steps: Optional[int] = None) -> Dict[str, Any]:
+                       max_steps: Optional[int] = None,
+                       prune_mode: Optional[str] = None,
+                       prune_net=None) -> Dict[str, Any]:
     """Score one candidate on ``episodes`` fresh, independently seeded episodes.
 
     Returns the mean solve rate, the mean and standard deviation of the solved
     steps and the exact list of episode seeds used. Deterministic for a fixed
     ``(selection_seed, generation, episodes, epsilon, mask_illegal)``.
+
+    ``prune_mode``/``prune_net`` are the task-4354 unit-3A hooks: ``"learned"``
+    uses the trained value-function mask, ``"none"`` disables masking and
+    ``None``/``"hand"`` preserves the pre-3A behaviour.
     """
     if root_mask is None:
         root_mask = tuple(1 for _ in spec.objectives)
@@ -336,7 +363,8 @@ def evaluate_candidate(net, genome: Sequence[float], spec: Spec, generation: int
         rng = random.Random(seed)
         result = rollout(net, genome, spec, None, root_mask, rng,
                          epsilon=epsilon, mask_illegal=mask_illegal,
-                         max_steps=max_steps)
+                         max_steps=max_steps, prune_mode=prune_mode,
+                         prune_net=prune_net)
         all_steps.append(result["steps"])
         traces.append(result["trace"])
         if result["solved"]:
@@ -850,17 +878,21 @@ def disjointness_report(pool_size: int = POOL_SIZE) -> Dict[str, Any]:
 # --------------------------------------------------------------------------
 
 def evaluate_validation(net, genome: Sequence[float], cfg: Any, generation: int,
-                        root_mask: Optional[Sequence[int]] = None
-                        ) -> Tuple[float, int, List[str]]:
+                        root_mask: Optional[Sequence[int]] = None,
+                        prune_net=None) -> Tuple[float, int, List[str]]:
     """The held-out ``val_solved_rate`` for a candidate (GREEDY rollouts).
 
     Returns ``(val_solved_rate, val_total, solved_case_names)``. The batch is
     deterministic per ``(val_seed, generation)``; each case runs one greedy
     episode from its own start state (with masking when the config enables it).
+
+    The mask is ``cfg.prune_mode`` (task 4354 unit 3A); ``"learned"`` uses
+    ``prune_net`` and applies NO hand-written filter.
     """
     cases = validation_batch(cfg, generation)
     solved = 0
     names: List[str] = []
+    prune_mode = getattr(cfg, "prune_mode", None)
     for index, case in enumerate(cases):
         if root_mask is None:
             root_mask = tuple(1 for _ in case.spec.objectives)
@@ -869,6 +901,7 @@ def evaluate_validation(net, genome: Sequence[float], cfg: Any, generation: int,
         result = rollout(net, genome, case.spec, case.start_state, root_mask,
                          rng, epsilon=0.0,
                          mask_illegal=bool(getattr(cfg, "mask_illegal", False)),
+                         prune_mode=prune_mode, prune_net=prune_net,
                          max_steps=case.max_steps)
         if result["solved"]:
             solved += 1

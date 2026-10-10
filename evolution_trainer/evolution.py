@@ -93,6 +93,13 @@ class EvoConfig:
     val_seed: int = 20261010
     val_pool_size: int = 64
     mask_illegal: bool = False
+    # task 4354 unit 3A: which mask the selection/validation rollouts use.
+    # "hand" is the task-4344 canonical-subtree prune (the default, behaviour
+    # unchanged); "learned" is the trained value-function prune of
+    # evolution_trainer/learned_prune.py (no hand-written filter); "none" turns
+    # masking off entirely. prune_checkpoint is the value-net JSON path.
+    prune_mode: str = "hand"
+    prune_checkpoint: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -202,6 +209,13 @@ class EvolutionTrainer:
         #: not change, one step is spent (``-step_cost``) and the agent chooses
         #: again. ``None`` (the default) is exactly Unit B behaviour.
         self.step_gate = None
+        #: task 4354 unit 3A: the loaded learned-prune value net (None unless
+        #: ``prune_mode == "learned"``), loaded ONCE per trainer.
+        self.prune_net = None
+        if self.config.prune_mode == "learned":
+            from . import learned_prune as _learned_prune
+            self.prune_net = _learned_prune.load_checkpoint(
+                self.config.prune_checkpoint or None)
 
     # -- ids ---------------------------------------------------------------
     def _next_aid(self, generation: int, tag: str) -> str:
@@ -456,6 +470,8 @@ class EvolutionTrainer:
             mask_illegal=self.config.mask_illegal,
             root_mask=self.root_mask,
             max_steps=self.config.max_episode_steps,
+            prune_mode=self.config.prune_mode,
+            prune_net=self.prune_net,
         )
         agent.sel_solved_rate = report["mean_solve_rate"]
         agent.sel_mean_steps = report["mean_steps"]
@@ -466,7 +482,7 @@ class EvolutionTrainer:
         if self.config.val_weight:
             val_rate, val_total, _names = sel.evaluate_validation(
                 self.net, agent.genome, self.config, generation,
-                root_mask=self.root_mask)
+                root_mask=self.root_mask, prune_net=self.prune_net)
         agent.val_solved_rate = val_rate
         agent.val_total = val_total
         agent.fitness = (base
@@ -604,6 +620,7 @@ class EvolutionTrainer:
             "val_weight": float(self.config.val_weight),
             "solved_rate_weight": float(self.config.solved_rate_weight),
             "mask_illegal": bool(self.config.mask_illegal),
+            "prune_mode": str(self.config.prune_mode),
             "mean_fitness": round(mean, 6),
             "solved": sum(a.solved_gen for a in population),
             "births": births,

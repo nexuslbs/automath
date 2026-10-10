@@ -98,6 +98,11 @@ class EvoConfig:
     # behaviour exactly. The held-out val pool (val64) has 0 provably-unsolvable
     # forms, so ON changes no 4344 selection number.
     graceful_unsolvable: bool = True
+    # task 4349 unit 4: action set for the whole training loop. ``allow_pop``
+    # False (default) keeps the historical four-action set byte-identical;
+    # True enables the opt-in ``pop`` action in every training/selection/val
+    # rollout (and thereby disables the canonical subtree prune).
+    allow_pop: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -257,7 +262,7 @@ class EvolutionTrainer:
                     depth: int, generation: int,
                     start_state: Optional[State] = None,
                     allow_spawn: bool = True) -> EpisodeResult:
-        env = DynamicEnv(spec)
+        env = DynamicEnv(spec, allow_pop=bool(self.config.allow_pop))
         state = start_state if start_state is not None else env.reset()
         max_steps = self.config.max_episode_steps or spec.max_steps
         target = tuple(int(spec.objectives[oid]) for oid in sorted(spec.objectives))
@@ -461,6 +466,7 @@ class EvolutionTrainer:
             mask_illegal=self.config.mask_illegal,
             root_mask=self.root_mask,
             max_steps=self.config.max_episode_steps,
+            allow_pop=bool(self.config.allow_pop),
         )
         agent.sel_solved_rate = report["mean_solve_rate"]
         agent.sel_mean_steps = report["mean_steps"]
@@ -783,6 +789,22 @@ class EvolutionTrainer:
             record = self._generation_record(generation, population, births)
             self.history.append(record)
             self._write_generation(generation, record)
+            # task 4349 unit 4: per-generation GEN line (with the held-out
+            # val_solved_rate) so the run log carries the val-term firing
+            # statistics. stdout only; no behaviour change. Printed when the
+            # 4344 selection/validation machinery is active.
+            if (self.config.selection_episodes > 0
+                    or float(self.config.val_weight) > 0.0):
+                print("[GEN] gen=%d pop=%d best_agent=%s solved=%d "
+                      "best_fitness=%.6f sel_solved_rate=%.6f "
+                      "val_solved_rate=%.6f val_total=%d best_steps=%s"
+                      % (generation,
+                         int(bool(getattr(self.config, "allow_pop", False))),
+                         record["best_agent"], record["solved"],
+                         record["best_fitness"], record["best_sel_solved_rate"],
+                         record["best_val_solved_rate"], record["best_val_total"],
+                         record["best_steps"]),
+                      flush=True)
             if on_generation is not None and on_generation(generation, record):
                 break
             population = self._next_population

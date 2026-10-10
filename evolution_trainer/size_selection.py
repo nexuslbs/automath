@@ -225,15 +225,20 @@ def rollout(net, genome: Sequence[float], spec: Spec,
             start_state: Optional[State], root_mask: Sequence[int],
             rng: random.Random, epsilon: float = 0.0,
             mask_illegal: bool = False,
-            max_steps: Optional[int] = None) -> Dict[str, Any]:
+            max_steps: Optional[int] = None,
+            allow_pop: bool = False) -> Dict[str, Any]:
     """One episode from ``start_state`` (or the spec's reset state).
 
     ``epsilon`` is the probability of a uniform random legal action; the rest
     of the time the argmax of the size-invariant genome's logits is taken over
     the (optionally masked) legal actions. The RNG is supplied by the caller so
     the episode is reproducible from its explicit seed.
+
+    ``allow_pop`` selects the opt-in ``pop`` action set (task 4349 unit 4);
+    False keeps the historical four-action environment byte-identical. The
+    canonical subtree prune auto-disables when ``allow_pop`` is True.
     """
-    env = DynamicEnv(spec)
+    env = DynamicEnv(spec, allow_pop=allow_pop)
     state = start_state if start_state is not None else env.reset()
     limit = int(max_steps if max_steps is not None else spec.max_steps)
     seen: Set[str] = {state.identity()}
@@ -274,7 +279,8 @@ def evaluate_candidate(net, genome: Sequence[float], spec: Spec, generation: int
                        epsilon: float = SELECTION_EPSILON,
                        mask_illegal: bool = False,
                        root_mask: Optional[Sequence[int]] = None,
-                       max_steps: Optional[int] = None) -> Dict[str, Any]:
+                       max_steps: Optional[int] = None,
+                       allow_pop: bool = False) -> Dict[str, Any]:
     """Score one candidate on ``episodes`` fresh, independently seeded episodes.
 
     Returns the mean solve rate, the mean and standard deviation of the solved
@@ -294,7 +300,7 @@ def evaluate_candidate(net, genome: Sequence[float], spec: Spec, generation: int
         rng = random.Random(seed)
         result = rollout(net, genome, spec, None, root_mask, rng,
                          epsilon=epsilon, mask_illegal=mask_illegal,
-                         max_steps=max_steps)
+                         max_steps=max_steps, allow_pop=allow_pop)
         all_steps.append(result["steps"])
         traces.append(result["trace"])
         if result["solved"]:
@@ -618,6 +624,12 @@ def evaluate_validation(net, genome: Sequence[float], cfg: Any, generation: int,
     episode from its own start state (with masking when the config enables it).
     """
     cases = validation_batch(cfg, generation)
+    # task 4349 unit 4: the whole candidate rollout runs in the configured
+    # action set (``current`` default, ``pop`` when allow_pop is set), so the
+    # val term and the graceful classifier agree with the training/selection
+    # episodes.
+    allow_pop = bool(getattr(cfg, "allow_pop", False))
+    action_set = "pop" if allow_pop else "current"
     # task 4349 unit 3: graceful unsolvable handling. Provably-unsolvable
     # val forms are excluded before they burn a rollout. The held-out pool is
     # solvable-only by construction (val64 = 0 excluded), so this is a no-op
@@ -625,7 +637,7 @@ def evaluate_validation(net, genome: Sequence[float], cfg: Any, generation: int,
     if bool(getattr(cfg, "graceful_unsolvable", False)):
         from .graceful import filter_unsolvable
         cases, _excluded, _records = filter_unsolvable(
-            cases, "current",
+            cases, action_set,
             node_budget=int(getattr(cfg, "graceful_node_budget", 20000)),
             time_budget=float(getattr(cfg, "graceful_time_budget", 1.5)))
     solved = 0
@@ -638,7 +650,7 @@ def evaluate_validation(net, genome: Sequence[float], cfg: Any, generation: int,
         result = rollout(net, genome, case.spec, case.start_state, root_mask,
                          rng, epsilon=0.0,
                          mask_illegal=bool(getattr(cfg, "mask_illegal", False)),
-                         max_steps=case.max_steps)
+                         max_steps=case.max_steps, allow_pop=allow_pop)
         if result["solved"]:
             solved += 1
             names.append(case.name)

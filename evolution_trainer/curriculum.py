@@ -46,6 +46,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from dynamic_env.engine import (
     Action,
     DynamicEnv,
+    action_set_flag,
     bfs_minimal_word,
     minimal_length,
 )
@@ -508,6 +509,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--val-seed", type=int, default=20261010)
     parser.add_argument("--val-pool-size", type=int, default=64)
     parser.add_argument("--mask-illegal", action="store_true")
+    # task 4349 unit 4: the action set for the WHOLE training loop. ``current``
+    # (default) is byte-identical to the 4344 pipeline; ``pop`` enables the
+    # opt-in pop action in every training/selection/validation rollout (and
+    # thereby auto-disables the canonical subtree prune).
+    parser.add_argument("--action-set", default="current",
+                        choices=["current", "pop"])
     # task 4349 unit 3: graceful unsolvable handling. Default ON with a
     # documented OFF switch; --stage graceful runs the bounded ON/OFF
     # measurement over --graceful-family.
@@ -524,7 +531,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     selection: Optional[Dict[str, Any]] = None
-    if args.selection_episodes > 0 or args.val_weight > 0.0 or args.mask_illegal:
+    if (args.selection_episodes > 0 or args.val_weight > 0.0
+            or args.mask_illegal or args.action_set != "current"):
         selection = {
             "selection_episodes": args.selection_episodes,
             "selection_seed": args.selection_seed,
@@ -536,6 +544,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "val_pool_size": args.val_pool_size,
             "mask_illegal": args.mask_illegal,
             "graceful_unsolvable": args.graceful_unsolvable,
+            "allow_pop": action_set_flag(args.action_set),
         }
 
     os.makedirs(args.out, exist_ok=True)

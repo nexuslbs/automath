@@ -72,3 +72,32 @@ See `ARGMAX_MASKING.md`.
 
 `--selection-episodes 0`, `--val-weight 0.0` and no `--mask-illegal` reproduce the
 size-invariant pipeline exactly; the new CSV columns are additive.
+
+## Reproducibility proof (unit 4b)
+
+The recorded selection metric is reproducible on a fresh RNG. Each seed's
+`best_agents_persist.json` `all_time_best` recorded `sel_solved_rate = 1.0`
+(30/30 training validation episodes, `SELECTION_SEED = 20261010`, epsilon 0.1,
+mask ON). Re-running the IDENTICAL `size_selection.evaluate_candidate` with only
+the episode seed changed to `FRESH_SEED = 31415926` (distinct from `20261010` and
+from the held-out eval seed `424242`) again scores 30/30 (rate 1.0, delta 0.00)
+on the recorded spec for every seed:
+
+| seed | selected genome | recorded spec | recorded | fresh (mask ON) | delta |
+| --- | --- | --- | --- | --- | --- |
+| 7  | `g046-o504` | `spec_dynamic_axiom` | 30/30 (1.0) | **30/30 (1.0)** | 0.00 |
+| 13 | `g023-m250` | `spec_dynamic_axiom` | 30/30 (1.0) | **30/30 (1.0)** | 0.00 |
+| 42 | `g023-m246` | `spec_dynamic_axiom` | 30/30 (1.0) | **30/30 (1.0)** | 0.00 |
+| 7 / 13 / 42 | `spec_multi_step` stage `all_time_best` | `spec_multi_step` | 30/30 (1.0) | **30/30 (1.0)** | 0.00 |
+
+For contrast, the 4339 size-invariant checkpoints recorded `fitness 1.30,
+solved: 1` for all seeds; with a fresh RNG and the old (unmasked) protocol they
+solve 0/30, 0/30, 1/30 (`epsilon=0.1`) and 0/30 (greedy). The 4339 recorded
+metric is a single-lucky-episode artefact; the 4344 metric is not.
+
+Caveat (honest): the recorded metric reproduces WITH the canonical-subtree mask
+ON. With the mask OFF the same genomes score 0/30 on `spec_multi_step` and
+`spec_dynamic_group_deep` and 1-2/30 on `spec_dynamic_axiom`, so the mask is
+load-bearing - FIX 1 makes the selection metric trustworthy, FIX 3 is what makes
+the shipped specs solvable. Raw fresh-seed evidence lives under
+`/opt/workspace/tmp/automath/selection-mean-rate/repro/`.

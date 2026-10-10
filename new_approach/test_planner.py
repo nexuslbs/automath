@@ -29,10 +29,11 @@ from .evolution import (
     ev_mul,
     sem_plan,
 )
-from .env import plan as core_plan
+from .env import ExprGoal, MinimalEnv, State, bfs_plan, plan as core_plan
+from .axioms import AxiomSet
 from .nodes import Change, Group, Node, One, Zero
-from .planner import Planner, make_planners
-from .expressions import nat
+from .planner import Planner, make_planners, planner_rollout
+from .expressions import eq, nat
 
 #: (label, domain, target) - every one is built by the planner from empty.
 HANDCRAFTED = [
@@ -196,6 +197,107 @@ def test_best_action_legality_sweep() -> None:
     print("legal actions checked: %d" % checked)
 
 
+# --------------------------------------------------------------------------
+# Pattern/ExprGoal goal-directed mode (branch ``planner-pattern-goals``)
+# --------------------------------------------------------------------------
+
+def test_pattern_solves_expr_two_prefix1() -> None:
+    from .pattern_suite import build_cases
+    cases = {c.name: c for c in build_cases()}
+    assert "expr_two/prefix1" in cases, sorted(cases)
+    case = cases["expr_two/prefix1"]
+    planner = make_planners()[0]
+    assert planner.pattern_goals is True
+    plan = planner.plan_pattern(
+        case.env, case.env.reset().stack,
+        depth_limit=min(planner.max_actions, case.max_steps))
+    assert plan is not None, "expr_two/prefix1 must be solved now"
+    state = case.env.reset()
+    for name in plan:
+        state = case.env.step(state, name)
+        assert state.last_error is None, state.last_error
+    assert case.env.goal_achieved(state)
+    assert len(plan) == case.bfs_optimal_actions, (plan, case.bfs_word)
+    print("expr_two/prefix1 plan=%s (bfs_optimal=%d)" % (plan,
+                                                         case.bfs_optimal_actions))
+
+
+def test_pattern_negative_control_unsolved_no_crash() -> None:
+    from .pattern_suite import build_cases, run_case
+    negatives = [c for c in build_cases() if c.kind == "negative"]
+    assert len(negatives) == 1, negatives
+    case = negatives[0]
+    planner = make_planners()[0]
+    detail = run_case(planner, case)
+    assert detail["solved"] is False
+    assert detail["searched_plan"] == []
+    assert detail["fallback_used"] is True
+    # every executed action must be legal (no env error)
+    state = case.env.reset()
+    for name in detail["actions"]:
+        state = case.env.step(state, name)
+        assert state.last_error is None, state.last_error
+    assert len(detail["actions"]) == case.max_steps
+    print("negative control: %d legal fallback steps, solved=%s"
+          % (detail["steps"], detail["solved"]))
+
+
+def test_pattern_determinism() -> None:
+    from .pattern_suite import build_cases, run_case
+    p1 = make_planners()[0]
+    p2 = make_planners()[0]
+    for case in build_cases():
+        a = run_case(p1, case)
+        b = run_case(p2, case)
+        assert a["searched_plan"] == b["searched_plan"], case.name
+        assert a["actions"] == b["actions"], case.name
+        assert a["trace"] == b["trace"], case.name
+        assert a["solved"] == b["solved"], case.name
+
+
+def test_pattern_disabled_matches_legacy_fallback() -> None:
+    from .pattern_suite import build_cases, run_case
+    planner = make_planners(pattern_goals=False)[0]
+    cases = {c.name: c for c in build_cases()}
+    case = cases["expr_two/prefix1"]
+    detail = run_case(planner, case)
+    # The pre-change legal fallback remains for pattern goals when the new
+    # path is disabled: legal steps only, no crash, and not solved.
+    assert detail["solved"] is False
+    assert detail["searched_plan"] == []
+    state = case.env.reset()
+    for name in detail["actions"]:
+        state = case.env.step(state, name)
+        assert state.last_error is None, state.last_error
+
+
+def test_fixed_state_path_untouched() -> None:
+    from .evolution_run import core_validation_cases, evo_validation_cases
+    fixed = 0
+    for enabled in (True, False):
+        core_planner, evo_planner = make_planners(pattern_goals=enabled)
+        pairs = ((core_planner, core_validation_cases()),
+                 (evo_planner, evo_validation_cases()))
+        for planner, cases in pairs:
+            for case in cases:
+                target = getattr(case.env.goal, "target", None)
+                if target is None:
+                    continue
+                actions = planner.plan(target, case.env.reset().stack)
+                assert actions is not None, (enabled, case.name)
+                state = case.env.reset()
+                for name in actions:
+                    assert name in planner.by_name, (enabled, case.name, name)
+                    assert planner.by_name[name].arity <= len(state.stack), (
+                        enabled, case.name, name)
+                    state = case.env.step(state, name)
+                assert case.env.goal_achieved(state), (enabled, case.name)
+                fixed += 1
+    assert fixed > 0
+    print("fixed-state cases unchanged with pattern mode on/off (+2x): %d"
+          % fixed)
+
+
 NEW_CHECKS: List[Tuple[str, object]] = [
     ("determinism_same_sequence", test_determinism_same_sequence),
     ("determinism_from_prefix_stacks", test_determinism_from_prefix_stacks),
@@ -206,6 +308,13 @@ NEW_CHECKS: List[Tuple[str, object]] = [
      test_budget_max_search_nodes_and_no_infinite_loop),
     ("fallback_is_legal_and_safe", test_fallback_is_legal_and_safe),
     ("best_action_legality_sweep", test_best_action_legality_sweep),
+    ("pattern_solves_expr_two_prefix1", test_pattern_solves_expr_two_prefix1),
+    ("pattern_negative_control_unsolved_no_crash",
+     test_pattern_negative_control_unsolved_no_crash),
+    ("pattern_determinism", test_pattern_determinism),
+    ("pattern_disabled_matches_legacy_fallback",
+     test_pattern_disabled_matches_legacy_fallback),
+    ("fixed_state_path_untouched", test_fixed_state_path_untouched),
 ]
 
 

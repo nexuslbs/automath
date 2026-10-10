@@ -50,6 +50,10 @@ def main(argv=None) -> int:
     p.add_argument("--max-search-nodes", type=int,
                    default=DEFAULT_MAX_SEARCH_NODES)
     p.add_argument("--max-actions", type=int, default=DEFAULT_MAX_ACTIONS)
+    p.add_argument("--no-pattern-goals", dest="pattern_goals",
+                   action="store_false", default=True,
+                   help="disable the new pattern/ExprGoal planner path so the "
+                        "pre-change fixed-state-only baseline is reproduced")
     args = p.parse_args(argv)
 
     cfg = {}
@@ -61,10 +65,12 @@ def main(argv=None) -> int:
     seed = int(cfg.get("seed", 20261009))
 
     core_planner, evo_planner = make_planners(
-        max_search_nodes=args.max_search_nodes, max_actions=args.max_actions)
+        max_search_nodes=args.max_search_nodes, max_actions=args.max_actions,
+        pattern_goals=args.pattern_goals)
     print("PLANNER_EVAL label=%s seed=%d max_search_nodes=%d max_actions=%d "
-          "genome=NONE train_cases=0 (evaluation only)"
-          % (args.label, seed, args.max_search_nodes, args.max_actions))
+          "pattern_goals=%s genome=NONE train_cases=0 (evaluation only)"
+          % (args.label, seed, args.max_search_nodes, args.max_actions,
+             "ON" if args.pattern_goals else "OFF"))
 
     t0 = time.perf_counter()
     core33 = planner_rollout(core_planner, gc.core_validation_cases())
@@ -99,6 +105,7 @@ def main(argv=None) -> int:
         "genome": None,
         "max_search_nodes": args.max_search_nodes,
         "max_actions": args.max_actions,
+        "pattern_goals": bool(args.pattern_goals),
         "train_cases_core": 0,
         "train_cases_evo": 0,
         "train_cases_total": 0,
@@ -116,9 +123,11 @@ def main(argv=None) -> int:
 
 
 def report_result(res: dict) -> None:
-    print("APPROACH=%s seed=%d genome=%s max_search_nodes=%d max_actions=%d"
+    print("APPROACH=%s seed=%d genome=%s max_search_nodes=%d max_actions=%d "
+          "pattern_goals=%s"
           % (res["approach"], res["seed"], res["genome"],
-             res["max_search_nodes"], res["max_actions"]))
+             res["max_search_nodes"], res["max_actions"],
+             "ON" if res.get("pattern_goals") else "OFF"))
     for key in ("core33", "ext114", "unseen"):
         r = res[key]
         print("SET %-7s solved=%d/%d mean_actions_solved=%s mean_reward=%s "

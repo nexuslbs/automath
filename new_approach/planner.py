@@ -85,6 +85,7 @@ class Planner:
         max_search_nodes: int = DEFAULT_MAX_SEARCH_NODES,
         max_actions: int = DEFAULT_MAX_ACTIONS,
         max_steps: int = DEFAULT_MAX_STEPS,
+        pattern_goals: bool = True,
     ) -> None:
         if domain not in ("evo", "core"):
             raise ValueError("unknown domain %r" % (domain,))
@@ -95,6 +96,13 @@ class Planner:
         self.max_search_nodes = int(max_search_nodes)
         self.max_actions = int(max_actions)
         self.max_steps = int(max_steps)
+        #: When true, ``planner_rollout`` uses ``plan_pattern`` for goals that
+        #: have no fixed ``target`` (ExprGoal and friends).  Fixed-state goals
+        #: never consult this flag: their code path is unchanged.
+        self.pattern_goals = bool(pattern_goals)
+        #: Largest stack-length reduction of a single action (arity - 1).  It is
+        #: the denominator of the admissible pattern-search lower bound.
+        self._max_reduction = max(1, max(a.arity - 1 for a in self.actions))
         self.target: Optional[Node] = None
         # caches keyed by canonical strings (target canonical -> derived data)
         self._word_cache: Dict[str, Tuple[str, ...]] = {}
@@ -242,6 +250,79 @@ class Planner:
                                       next(counter), nxt))
         return None
 
+    # -- pattern/ExprGoal planning ---------------------------------------
+    def plan_pattern(self, env, initial_stack: Sequence[Node] = (),
+                     depth_limit: Optional[int] = None
+                     ) -> Optional[List[str]]:
+        """Bounded deterministic action word to a PATTERN goal.
+
+        The goal predicate is the ENVIRONMENT'S own ``env.goal_achieved``: the
+        search knows nothing about ``ExprGoal`` internals, so any goal form
+        that implements ``achieved`` (no ``target`` attribute) is supported.
+
+        The procedure has the same shape and explicit bounds as the fixed-state
+        search (``plan``/``_search``): deterministic candidate order
+        (``self.order``, the domain's canonical action order), a ``came`` /
+        ``gbest`` dedup map keyed by the reachable stack, a hard
+        ``max_search_nodes`` expansion cap, a depth cap, a monotone tie-break
+        counter and NO RNG.  The priority is ``g + h`` with the admissible
+        structural bound ``_pattern_h``.  It returns ``None`` when no plan is
+        found within the explicit budget, so the caller can fall back to a
+        legal action (never crash, never illegal).
+        """
+        start = tuple(initial_stack)
+        if env.goal_achieved(State(stack=start)):
+            return []
+        if depth_limit is None:
+            depth_limit = self.max_steps
+        limit = min(int(depth_limit), self.max_actions)
+        if limit <= 0:
+            return None
+        counter = itertools.count()
+        came: Dict[Tuple[Node, ...], Optional[Tuple[Tuple[Node, ...], str]]] = {
+            start: None}
+        gbest: Dict[Tuple[Node, ...], int] = {start: 0}
+        heap: List[Tuple[int, int, int, Tuple[Node, ...]]] = [
+            (self._pattern_h(start), 0, next(counter), start)]
+        nodes = 0
+        while heap:
+            _f, g, _t, state = heapq.heappop(heap)
+            if env.goal_achieved(State(stack=state)):
+                return self._reconstruct(came, state)
+            if g >= limit:
+                continue
+            for name in self.order:
+                action = self.by_name[name]
+                if action.arity > len(state):
+                    continue
+                nxt = self._apply(state, action)
+                ng = g + 1
+                if gbest.get(nxt, 1 << 30) <= ng:
+                    continue
+                gbest[nxt] = ng
+                came[nxt] = (state, name)
+                nodes += 1
+                if nodes >= self.max_search_nodes:
+                    return None
+                heapq.heappush(heap, (ng + self._pattern_h(nxt), ng,
+                                      next(counter), nxt))
+        return None
+
+    def _pattern_h(self, stack: Sequence[Node]) -> int:
+        """Admissible lower bound on actions to reach a single-node stack.
+
+        A pattern/``ExprGoal`` is only achieved on a single-node stack
+        (``len(stack) == 1``).  One action reduces the stack length by at most
+        ``self._max_reduction`` (``arity - 1``), so at least
+        ``ceil((len(stack) - 1) / reduction)`` actions are still needed.  Being
+        a lower bound, it can hide no solution.
+        """
+        n = len(stack)
+        if n <= 1:
+            return 0
+        r = self._max_reduction
+        return (n - 1 + r - 1) // r
+
     @staticmethod
     def _reconstruct(came, state) -> List[str]:
         actions: List[str] = []
@@ -267,13 +348,16 @@ class Planner:
 
 
 def make_planners(max_search_nodes: int = DEFAULT_MAX_SEARCH_NODES,
-                  max_actions: int = DEFAULT_MAX_ACTIONS
+                  max_actions: int = DEFAULT_MAX_ACTIONS,
+                  pattern_goals: bool = True
                   ) -> Tuple[Planner, Planner]:
     """(core_planner, evo_planner) with the explicit bounds applied."""
     core = Planner(BUILD_ACTIONS, domain="core",
-                   max_search_nodes=max_search_nodes, max_actions=max_actions)
+                   max_search_nodes=max_search_nodes, max_actions=max_actions,
+                   pattern_goals=pattern_goals)
     evo = Planner(EVO_ACTIONS, domain="evo",
-                  max_search_nodes=max_search_nodes, max_actions=max_actions)
+                  max_search_nodes=max_search_nodes, max_actions=max_actions,
+                  pattern_goals=pattern_goals)
     return core, evo
 
 
@@ -291,6 +375,14 @@ def planner_rollout(planner: Planner, cases: Sequence) -> dict:
     Equivalent metric semantics to ``gen_common.rollout_eval`` (solved/total,
     mean actions on solved, mean reward ``(1 if solved else 0) - 0.05 * n``)
     plus PER-FORM solved flags.  One plan call per case (evaluation only).
+
+    FIXED-state goals (``target`` is set) use the UNCHANGED ``plan`` code path.
+    PATTERN/``ExprGoal`` goals (no ``target`` attribute) enter the new
+    ``plan_pattern`` path only when ``planner.pattern_goals`` is true: a bounded
+    deterministic best-first search whose goal predicate is the environment's
+    own ``goal_achieved``.  When pattern planning is disabled, or finds no plan
+    within budget, the same legal fallback as before is used for the remaining
+    steps (never crash, never illegal).
     """
     import time
 
@@ -315,8 +407,23 @@ def planner_rollout(planner: Planner, cases: Sequence) -> dict:
                 if case.env.goal_achieved(state):
                     break
         else:
-            # Non-fixed (pattern) goal: explicit fallback, legal steps only.
-            for _ in range(case.max_steps):
+            # Non-fixed (pattern/ExprGoal) goal.  This branch is the ONLY place
+            # the pattern search is entered, so fixed-state cases are
+            # behaviourally identical to the pre-change planner.
+            actions: List[str] = []
+            if planner.pattern_goals:
+                depth = min(planner.max_actions, case.max_steps)
+                actions = planner.plan_pattern(
+                    case.env, state.stack, depth_limit=depth) or []
+            for name in actions:
+                if n >= case.max_steps:
+                    break
+                state = case.env.step(state, name)
+                n += 1
+                if case.env.goal_achieved(state):
+                    break
+            # Safe legal fallback for any remaining budget.
+            while n < case.max_steps:
                 if case.env.goal_achieved(state):
                     break
                 name = planner.fallback_action(state.stack)
